@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
 use hyper::{
     body::{Bytes, Incoming},
@@ -8,13 +6,14 @@ use hyper::{
     Method, Request, Response, StatusCode,
 };
 use hyper_util::rt::TokioIo;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
 pub async fn run() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     let listener = TcpListener::bind(addr).await.unwrap();
 
-    println!("Listening on http://{}", addr);
+    println!("Listening API on http://{}", addr);
 
     loop {
         let (stream, _) = listener.accept().await.unwrap();
