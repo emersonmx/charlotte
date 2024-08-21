@@ -1,7 +1,14 @@
 package main
 
-import "fmt"
+import (
+	"log"
+	"net/http"
+
+	"github.com/elazarl/goproxy"
+)
 
 func main() {
-	fmt.Println("Hello World!")
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = true
+	log.Fatal(http.ListenAndServe(":3000", proxy))
 }
