@@ -1,5 +1,8 @@
-use http_body_util::{BodyExt, combinators::BoxBody};
-use hyper::{Request, Response, body::Bytes, header::HeaderValue, service::service_fn};
+use http_body_util::{BodyExt, Empty, combinators::BoxBody};
+use hyper::{
+    HeaderMap, Method, Request, Response, Uri, body::Bytes, header::HeaderValue,
+    service::service_fn, upgrade::Upgraded,
+};
 use hyper_util::rt::TokioIo;
 use tokio::net::{TcpListener, TcpStream};
 
@@ -48,12 +51,31 @@ async fn main() -> anyhow::Result<()> {
 async fn proxy(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Error>>, Error> {
-    let prepared_req = make_request(req).await?;
+    if req.method() == Method::CONNECT {
+        if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
+            tokio::spawn(async move {
+                match hyper::upgrade::on(req).await {
+                    Ok(upgraded) => {
+                        if let Err(e) = tunnel(upgraded, &addr).await {
+                            eprintln!("Server io error: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("Upgrade error: {}", e),
+                }
+            });
+        }
 
-    let backend_res = fetch(prepared_req).await?;
+        let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
+        let res = Response::new(empty);
+        Ok(res)
+    } else {
+        let prepared_req = make_request(req).await?;
 
-    let client_res = make_response(backend_res).await?;
-    Ok(client_res)
+        let backend_res = fetch(prepared_req).await?;
+
+        let client_res = make_response(backend_res).await?;
+        Ok(client_res)
+    }
 }
 
 async fn make_request(
@@ -89,7 +111,7 @@ async fn fetch(
 ) -> Result<Response<hyper::body::Incoming>, Error> {
     let (mut parts, body) = req.into_parts();
 
-    let addr = get_target_addr(&parts)?;
+    let addr = get_target_addr(&parts.uri, &parts.headers)?;
     let stream = TcpStream::connect(addr.clone()).await?;
     let io = TokioIo::new(stream);
 
@@ -117,12 +139,27 @@ async fn fetch(
     Ok(res)
 }
 
-fn get_target_addr(parts: &hyper::http::request::Parts) -> Result<String, Error> {
-    if let Some(host) = parts.uri.host() {
-        let port = parts.uri.port_u16().unwrap_or(80);
+async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
+    let mut server = TcpStream::connect(addr).await?;
+    let mut upgraded = TokioIo::new(upgraded);
+
+    let (from_client, from_server) =
+        tokio::io::copy_bidirectional(&mut upgraded, &mut server).await?;
+
+    println!(
+        "Client wrote {} bytes and received {} bytes",
+        from_client, from_server
+    );
+
+    Ok(())
+}
+
+fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+    if let Some(host) = uri.host() {
+        let port = uri.port_u16().unwrap_or(80);
         Ok(format!("{}:{}", host, port))
-    } else if let Some(host) = parts.headers.get(hyper::header::HOST) {
-        let default_port = match parts.uri.scheme_str() {
+    } else if let Some(host) = headers.get(hyper::header::HOST) {
+        let default_port = match uri.scheme_str() {
             Some("https") => 443_u16,
             _ => 80_u16,
         };
