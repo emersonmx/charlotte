@@ -11,10 +11,10 @@ async fn main() -> anyhow::Result<()> {
     let server_addr = "0.0.0.0:8888";
     let listener = TcpListener::bind(server_addr).await?;
 
-    println!("Listening on http://{}", server_addr);
+    println!("Listening on http://{server_addr}");
     loop {
         let (socket, socket_addr) = listener.accept().await?;
-        println!("Client '{}' connected", socket_addr);
+        println!("Client '{socket_addr}' connected");
 
         let io = TokioIo::new(socket);
         tokio::spawn(async move {
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
                 .with_upgrades()
                 .await
             {
-                eprintln!("Error serving connection: {:?}", err);
+                eprintln!("Error serving connection: {err:?}");
             }
         });
     }

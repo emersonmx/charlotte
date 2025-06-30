@@ -30,10 +30,10 @@ pub async fn proxy(
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
                         if let Err(e) = tunnel(upgraded, &addr).await {
-                            eprintln!("Server io error: {}", e);
+                            eprintln!("Server io error: {e}");
                         }
                     }
-                    Err(e) => eprintln!("Upgrade error: {}", e),
+                    Err(e) => eprintln!("Upgrade error: {e}"),
                 }
             });
         }
@@ -95,7 +95,7 @@ async fn fetch(
         .await?;
     tokio::spawn(async move {
         if let Err(err) = conn.await {
-            eprintln!("Connection failed: {:?}", err);
+            eprintln!("Connection failed: {err:?}");
         }
     });
 
@@ -119,10 +119,7 @@ async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
     let (from_client, from_server) =
         tokio::io::copy_bidirectional(&mut upgraded, &mut server).await?;
 
-    println!(
-        "Client wrote {} bytes and received {} bytes",
-        from_client, from_server
-    );
+    println!("Client wrote {from_client} bytes and received {from_server} bytes");
 
     Ok(())
 }
@@ -130,7 +127,7 @@ async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
 fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     if let Some(host) = uri.host() {
         let port = uri.port_u16().unwrap_or(80);
-        Ok(format!("{}:{}", host, port))
+        Ok(format!("{host}:{port}"))
     } else if let Some(host) = headers.get(hyper::header::HOST) {
         let default_port = match uri.scheme_str() {
             Some("https") => 443_u16,
@@ -144,9 +141,9 @@ fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
         match host_str.rsplit_once(':') {
             Some((host, port_str)) => {
                 let port = port_str.parse::<u16>().unwrap_or(default_port);
-                Ok(format!("{}:{}", host, port))
+                Ok(format!("{host}:{port}"))
             }
-            None => Ok(format!("{}:{}", host_str, default_port)),
+            None => Ok(format!("{host_str}:{default_port}")),
         }
     } else {
         Err(Error::Proxy(
