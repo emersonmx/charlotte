@@ -8,7 +8,7 @@ use charlotte::proxy;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let server_addr = "127.0.0.1:8888";
+    let server_addr = "0.0.0.0:8888";
     let listener = TcpListener::bind(server_addr).await?;
 
     println!("Listening on http://{}", server_addr);
