@@ -39,7 +39,8 @@ pub async fn proxy(req: IncomingRequest) -> Result<Response, Error> {
         }
 
         let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
-        let res = Response::new(empty);
+        let mut res = Response::new(empty);
+        *res.status_mut() = hyper::StatusCode::OK;
         Ok(res)
     } else {
         let prepared_req = make_request(req).await?;
