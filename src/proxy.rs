@@ -1,11 +1,13 @@
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
-use hyper::{
-    HeaderMap, Method, Request, Response, Uri, body::Bytes, header::HeaderValue, upgrade::Upgraded,
-};
+use hyper::{HeaderMap, Method, Uri, body::Bytes, header::HeaderValue, upgrade::Upgraded};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpStream;
 
 type ClientBuilder = hyper::client::conn::http1::Builder;
+type IncomingRequest = hyper::Request<hyper::body::Incoming>;
+type IncomingResponse = hyper::Response<hyper::body::Incoming>;
+type Request = hyper::Request<BoxBody<Bytes, Error>>;
+type Response = hyper::Response<BoxBody<Bytes, Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -21,9 +23,7 @@ pub enum Error {
     Proxy(String),
 }
 
-pub async fn proxy(
-    req: Request<hyper::body::Incoming>,
-) -> Result<Response<BoxBody<Bytes, Error>>, Error> {
+pub async fn proxy(req: IncomingRequest) -> Result<Response, Error> {
     if req.method() == Method::CONNECT {
         if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
             tokio::spawn(async move {
@@ -51,9 +51,7 @@ pub async fn proxy(
     }
 }
 
-async fn make_request(
-    req: Request<hyper::body::Incoming>,
-) -> Result<Request<BoxBody<Bytes, Error>>, Error> {
+async fn make_request(req: IncomingRequest) -> Result<Request, Error> {
     let (mut parts, incoming_body) = req.into_parts();
     let body = incoming_body
         .collect()
@@ -70,9 +68,7 @@ async fn make_request(
     Ok(req)
 }
 
-async fn make_response(
-    res: Response<hyper::body::Incoming>,
-) -> Result<Response<BoxBody<Bytes, Error>>, Error> {
+async fn make_response(res: IncomingResponse) -> Result<Response, Error> {
     let (mut parts, incoming_body) = res.into_parts();
     let body = incoming_body
         .collect()
@@ -87,9 +83,7 @@ async fn make_response(
     Ok(res)
 }
 
-async fn fetch(
-    req: Request<BoxBody<Bytes, Error>>,
-) -> Result<Response<hyper::body::Incoming>, Error> {
+async fn fetch(req: Request) -> Result<IncomingResponse, Error> {
     let (mut parts, body) = req.into_parts();
 
     let addr = get_target_addr(&parts.uri, &parts.headers)?;
