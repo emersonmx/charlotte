@@ -54,12 +54,17 @@ pub async fn proxy(
 async fn make_request(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Request<BoxBody<Bytes, Error>>, Error> {
-    let (parts, incoming_body) = req.into_parts();
+    let (mut parts, incoming_body) = req.into_parts();
     let body = incoming_body
         .collect()
         .await?
         .map_err(|never| match never {})
         .boxed();
+
+    parts.headers.remove(hyper::header::CONNECTION);
+    parts.headers.remove("proxy-connection");
+    parts.headers.remove("keep-alive");
+    parts.headers.remove(hyper::header::TRANSFER_ENCODING);
 
     let req = Request::from_parts(parts, body);
     Ok(req)
@@ -68,12 +73,15 @@ async fn make_request(
 async fn make_response(
     res: Response<hyper::body::Incoming>,
 ) -> Result<Response<BoxBody<Bytes, Error>>, Error> {
-    let (parts, incoming_body) = res.into_parts();
+    let (mut parts, incoming_body) = res.into_parts();
     let body = incoming_body
         .collect()
         .await?
         .map_err(|never| match never {})
         .boxed();
+
+    parts.headers.remove(hyper::header::CONNECTION);
+    parts.headers.remove(hyper::header::TRANSFER_ENCODING);
 
     let res = Response::from_parts(parts, body);
     Ok(res)
