@@ -1,7 +1,6 @@
-use std::{fs, io::Write, path::Path, time::SystemTime};
-
 use anyhow::Result;
 use rcgen::{BasicConstraints, Certificate, CertificateParams, DnType, IsCa, KeyPair};
+use std::{fs, io::Write, path::Path, time::SystemTime};
 
 fn main() -> Result<()> {
     let key_pair = KeyPair::generate()?;
