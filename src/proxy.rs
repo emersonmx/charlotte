@@ -137,29 +137,54 @@ async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
 }
 
 fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
-    if let Some(host) = uri.host() {
-        let port = uri.port_u16().unwrap_or(80);
-        Ok(format!("{host}:{port}"))
-    } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let default_port = match uri.scheme_str() {
-            Some("https") => 443_u16,
-            _ => 80_u16,
-        };
+    let host = get_host(uri, headers)?;
+    let port = get_port(uri, headers)?;
+    Ok(format!("{host}:{port}"))
+}
 
+fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+    if let Some(host) = uri.host() {
+        Ok(host.to_string())
+    } else if let Some(host) = headers.get(hyper::header::HOST) {
         let host_str = host
             .to_str()
             .map_err(|_| Error::Proxy("Invalid HOST header format (not UTF-8)".to_string()))?;
 
         match host_str.rsplit_once(':') {
-            Some((host, port_str)) => {
-                let port = port_str.parse::<u16>().unwrap_or(default_port);
-                Ok(format!("{host}:{port}"))
-            }
-            None => Ok(format!("{host_str}:{default_port}")),
+            Some((host, _)) => Ok(host.to_string()),
+            None => Ok(host_str.to_string()),
         }
     } else {
         Err(Error::Proxy(
             "Missing host information in URI or Host header".to_string(),
+        ))
+    }
+}
+
+fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+    let default_port = match uri.scheme_str() {
+        Some("https") => 443_u16,
+        _ => 80_u16,
+    };
+
+    if uri.host().is_some() {
+        let port = uri.port_u16().unwrap_or(default_port);
+        Ok(port.to_string())
+    } else if let Some(host) = headers.get(hyper::header::HOST) {
+        let host_str = host
+            .to_str()
+            .map_err(|_| Error::Proxy("Invalid HOST header format (not UTF-8)".to_string()))?;
+
+        match host_str.rsplit_once(':') {
+            Some((_, port_str)) => {
+                let port = port_str.parse::<u16>().unwrap_or(default_port);
+                Ok(port.to_string())
+            }
+            None => Ok(default_port.to_string()),
+        }
+    } else {
+        Err(Error::Proxy(
+            "Missing port information in URI or Host header".to_string(),
         ))
     }
 }
