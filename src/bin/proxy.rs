@@ -4,7 +4,7 @@ use tokio::net::TcpListener;
 
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
-use charlotte::proxy;
+use charlotte::Proxy;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -17,11 +17,12 @@ async fn main() -> anyhow::Result<()> {
         println!("Client '{socket_addr}' connected");
 
         let io = TokioIo::new(socket);
+        let proxy = Proxy::new();
         tokio::spawn(async move {
             if let Err(err) = ServerBuilder::new()
                 .preserve_header_case(true)
                 .title_case_headers(true)
-                .serve_connection(io, service_fn(proxy))
+                .serve_connection(io, service_fn(|req| proxy.handle(req)))
                 .with_upgrades()
                 .await
             {

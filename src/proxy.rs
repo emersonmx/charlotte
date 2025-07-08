@@ -23,32 +23,41 @@ pub enum Error {
     Proxy(String),
 }
 
-pub async fn proxy(req: IncomingRequest) -> Result<Response, Error> {
-    if req.method() == Method::CONNECT {
-        if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
-            tokio::spawn(async move {
-                match hyper::upgrade::on(req).await {
-                    Ok(upgraded) => {
-                        if let Err(e) = tunnel(upgraded, &addr).await {
-                            eprintln!("Server io error: {e}");
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Proxy;
+
+impl Proxy {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub async fn handle(&self, req: IncomingRequest) -> Result<Response, Error> {
+        if req.method() == Method::CONNECT {
+            if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
+                tokio::spawn(async move {
+                    match hyper::upgrade::on(req).await {
+                        Ok(upgraded) => {
+                            if let Err(e) = tunnel(upgraded, &addr).await {
+                                eprintln!("Server io error: {e}");
+                            }
                         }
+                        Err(e) => eprintln!("Upgrade error: {e}"),
                     }
-                    Err(e) => eprintln!("Upgrade error: {e}"),
-                }
-            });
+                });
+            }
+
+            let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
+            let mut res = Response::new(empty);
+            *res.status_mut() = hyper::StatusCode::OK;
+            Ok(res)
+        } else {
+            let prepared_req = make_request(req).await?;
+
+            let backend_res = fetch(prepared_req).await?;
+
+            let client_res = make_response(backend_res).await?;
+            Ok(client_res)
         }
-
-        let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
-        let mut res = Response::new(empty);
-        *res.status_mut() = hyper::StatusCode::OK;
-        Ok(res)
-    } else {
-        let prepared_req = make_request(req).await?;
-
-        let backend_res = fetch(prepared_req).await?;
-
-        let client_res = make_response(backend_res).await?;
-        Ok(client_res)
     }
 }
 
