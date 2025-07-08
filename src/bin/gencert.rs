@@ -19,11 +19,11 @@ fn main() -> Result<()> {
     let certs_path = Path::new("certs");
     fs::create_dir_all(certs_path)?;
 
-    let mut cert_file = fs::File::create(certs_path.join("cert.pem"))?;
-    cert_file.write_all(cert.pem().as_bytes())?;
+    let mut cert_file = fs::File::create(certs_path.join("ca.crt"))?;
+    cert_file.write_all(cert.der())?;
 
-    let mut keypair_file = fs::File::create(certs_path.join("key_pair.pem"))?;
-    keypair_file.write_all(key_pair.serialize_pem().as_bytes())?;
+    let mut keypair_file = fs::File::create(certs_path.join("ca.key"))?;
+    keypair_file.write_all(key_pair.serialized_der())?;
 
     Ok(())
 }
