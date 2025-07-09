@@ -1,6 +1,8 @@
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
+use hyper::service::service_fn;
 use hyper::{HeaderMap, Method, Uri, body::Bytes, header::HeaderValue, upgrade::Upgraded};
 use hyper_util::rt::TokioIo;
+use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
 type ClientBuilder = hyper::client::conn::http1::Builder;
@@ -8,6 +10,7 @@ type IncomingRequest = hyper::Request<hyper::body::Incoming>;
 type IncomingResponse = hyper::Response<hyper::body::Incoming>;
 type Request = hyper::Request<BoxBody<Bytes, Error>>;
 type Response = hyper::Response<BoxBody<Bytes, Error>>;
+type ServerBuilder = hyper::server::conn::http1::Builder;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -58,6 +61,31 @@ impl Proxy {
             let client_res = make_response(backend_res).await?;
             Ok(client_res)
         }
+    }
+}
+
+pub async fn serve() -> Result<(), Error> {
+    let server_addr = "0.0.0.0:8888";
+    let listener = TcpListener::bind(server_addr).await?;
+
+    println!("Listening on http://{server_addr}");
+    loop {
+        let (socket, socket_addr) = listener.accept().await?;
+        println!("Client '{socket_addr}' connected");
+
+        let io = TokioIo::new(socket);
+        let proxy = Proxy::new();
+        tokio::spawn(async move {
+            if let Err(err) = ServerBuilder::new()
+                .preserve_header_case(true)
+                .title_case_headers(true)
+                .serve_connection(io, service_fn(|req| proxy.handle(req)))
+                .with_upgrades()
+                .await
+            {
+                eprintln!("Error serving connection: {err:?}");
+            }
+        });
     }
 }
 
