@@ -150,6 +150,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 
 [[package]]
+name = "charlotte"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "rcgen",
+ "rustls",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "clang-sys"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -167,20 +181,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7caa3f9de89ddbe2c607f4101924c5abec803763ae9534e4f4d7d8f84aa81f0"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "http-body-util",
- "hyper",
- "hyper-util",
- "rcgen",
- "rustls",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -1060,7 +1060,7 @@ name = "tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "core",
+ "charlotte",
  "http-body-util",
  "hyper",
  "hyper-util",

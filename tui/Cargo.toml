@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-core = { version = "0.1.0", path = "../core" }
+charlotte = { version = "0.1.0", path = "../charlotte" }
 anyhow.workspace = true
 http-body-util = "0.1.3"
 hyper = { version = "1.6.0", features = ["full"] }

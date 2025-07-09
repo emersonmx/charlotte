@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "tools/gencert", "tui"]
+members = ["charlotte", "tools/gencert", "tui"]
 
 [workspace.dependencies]
 anyhow = "1.0.98"
