@@ -4,7 +4,7 @@ use tokio::net::TcpListener;
 
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
-use charlotte::Proxy;
+use core::Proxy;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
