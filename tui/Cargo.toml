@@ -7,4 +7,4 @@ edition = "2024"
 charlotte = { version = "0.1.0", path = "../charlotte" }
 anyhow.workspace = true
 thiserror.workspace = true
-tokio = { version = "1.45.1", features = ["full"] }
+tokio.workspace = true

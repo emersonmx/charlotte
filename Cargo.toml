@@ -2,6 +2,13 @@
 resolver = "3"
 members = ["charlotte", "tools/gencert", "tui"]
 
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
 [workspace.dependencies]
 anyhow = "1.0.98"
 thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["full"] }

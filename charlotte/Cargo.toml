@@ -11,4 +11,4 @@ hyper-util = { version = "0.1.14", features = ["full"] }
 rcgen = "0.13.2"
 rustls = { version = "0.23.28", features = ["ring", "std"] }
 thiserror.workspace = true
-tokio = { version = "1.45.1", features = ["full"] }
+tokio.workspace = true
