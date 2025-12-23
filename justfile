@@ -4,6 +4,9 @@
 @run:
     cargo run --bin tui
 
+@gencert:
+    cargo run --bin gencert
+
 @watch:
     bacon
 
