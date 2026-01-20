@@ -38,8 +38,8 @@ pub enum Error {
 
 #[derive(Debug)]
 pub enum Message {
-    ServerStarted(std::net::SocketAddr),
-    ServerStopped(std::net::SocketAddr),
+    ServerStarted,
+    ServerStopped,
     ClientConnected(std::net::SocketAddr),
     ClientDisconnected(std::net::SocketAddr),
     RequestSent((RequestId, Request)),
@@ -54,9 +54,7 @@ pub async fn serve(
 ) -> Result<(), Error> {
     let listener = TcpListener::bind(server_addr).await?;
 
-    let _ = message_channel
-        .send(Message::ServerStarted(server_addr))
-        .await;
+    let _ = message_channel.send(Message::ServerStarted).await;
 
     let request_id_counter = Arc::new(AtomicU32::new(1));
     loop {
@@ -103,9 +101,7 @@ pub async fn serve(
         }
     }
 
-    let _ = message_channel
-        .send(Message::ServerStopped(server_addr))
-        .await;
+    let _ = message_channel.send(Message::ServerStopped).await;
 
     Ok(())
 }
