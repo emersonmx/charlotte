@@ -1,4 +1,4 @@
-use crossterm::event;
+use crossterm::event::{self, Event, EventStream};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -9,6 +9,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 
 #[derive(Debug)]
 enum Command {
@@ -25,53 +26,43 @@ struct App {
 }
 
 impl App {
-    const FPS: u64 = 60;
-    const POLL_DURATION: std::time::Duration = std::time::Duration::from_millis(1000 / Self::FPS);
-
-    fn run(
+    async fn run(
         &mut self,
         terminal: &mut DefaultTerminal,
         mut counter_rx: mpsc::Receiver<u64>,
         cmd_tx: mpsc::Sender<Command>,
     ) -> anyhow::Result<()> {
         self.running = true;
+        let mut events = EventStream::new();
 
         while self.running {
-            self.handle_events(&cmd_tx)?;
-            self.update(&mut counter_rx);
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
-        }
 
-        Ok(())
-    }
-
-    fn handle_events(&mut self, cmd_tx: &mpsc::Sender<Command>) -> anyhow::Result<()> {
-        while event::poll(Self::POLL_DURATION)? {
-            let event = event::read()?;
-
-            if let event::Event::Key(event) = event {
-                let cmd = match event.code {
-                    event::KeyCode::Char('s') => Some(Command::Start),
-                    event::KeyCode::Char('t') => Some(Command::Stop),
-                    event::KeyCode::Char('r') => Some(Command::Restart),
-                    event::KeyCode::Char('q') => {
-                        self.running = false;
-                        Some(Command::Quit)
-                    }
-                    _ => None,
-                };
-
-                if let Some(command) = cmd {
-                    let _ = cmd_tx.try_send(command);
-                }
+            tokio::select! {
+                Some(Ok(event)) = events.next() => self.handle_events(&event, &cmd_tx).await,
+                Some(value) = counter_rx.recv() => self.counter = value,
             }
         }
+
         Ok(())
     }
 
-    fn update(&mut self, counter_rx: &mut mpsc::Receiver<u64>) {
-        while let Ok(value) = counter_rx.try_recv() {
-            self.counter = value;
+    async fn handle_events(&mut self, event: &Event, cmd_tx: &mpsc::Sender<Command>) {
+        if let event::Event::Key(event) = event {
+            let cmd = match event.code {
+                event::KeyCode::Char('s') => Some(Command::Start),
+                event::KeyCode::Char('t') => Some(Command::Stop),
+                event::KeyCode::Char('r') => Some(Command::Restart),
+                event::KeyCode::Char('q') => {
+                    self.running = false;
+                    Some(Command::Quit)
+                }
+                _ => None,
+            };
+
+            if let Some(command) = cmd {
+                let _ = cmd_tx.send(command).await;
+            }
         }
     }
 
@@ -155,5 +146,8 @@ async fn main() -> anyhow::Result<()> {
         counter_task(cmd_rx, counter_tx).await;
     });
 
-    ratatui::run(|terminal| App::default().run(terminal, counter_rx, cmd_tx))
+    let mut terminal = ratatui::init();
+    let app_result = App::default().run(&mut terminal, counter_rx, cmd_tx).await;
+    ratatui::restore();
+    app_result
 }
