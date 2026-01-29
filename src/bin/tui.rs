@@ -2,36 +2,19 @@ use crossterm::event::{self, Event, EventStream};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
-    layout::Rect,
-    style::Stylize,
-    symbols::border,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
+    layout::{Constraint, Layout, Rect},
+    text::Line,
+    widgets::{Cell, Paragraph, Row, Table, Widget},
 };
-use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
-
-#[derive(Debug)]
-enum Command {
-    Start,
-    Stop,
-    Restart,
-    Quit,
-}
 
 #[derive(Debug, Default)]
 struct App {
-    counter: u64,
     running: bool,
 }
 
 impl App {
-    async fn run(
-        &mut self,
-        terminal: &mut DefaultTerminal,
-        mut counter_rx: mpsc::Receiver<u64>,
-        cmd_tx: mpsc::Sender<Command>,
-    ) -> anyhow::Result<()> {
+    async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         self.running = true;
         let mut events = EventStream::new();
 
@@ -39,30 +22,18 @@ impl App {
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
             tokio::select! {
-                Some(Ok(event)) = events.next() => self.handle_events(&event, &cmd_tx).await,
-                Some(value) = counter_rx.recv() => self.counter = value,
+                Some(Ok(event)) = events.next() => self.handle_events(&event).await,
             }
         }
 
         Ok(())
     }
 
-    async fn handle_events(&mut self, event: &Event, cmd_tx: &mpsc::Sender<Command>) {
-        if let event::Event::Key(event) = event {
-            let cmd = match event.code {
-                event::KeyCode::Char('s') => Some(Command::Start),
-                event::KeyCode::Char('t') => Some(Command::Stop),
-                event::KeyCode::Char('r') => Some(Command::Restart),
-                event::KeyCode::Char('q') => {
-                    self.running = false;
-                    Some(Command::Quit)
-                }
-                _ => None,
-            };
-
-            if let Some(command) = cmd {
-                let _ = cmd_tx.send(command).await;
-            }
+    async fn handle_events(&mut self, event: &Event) {
+        if let event::Event::Key(event) = event
+            && let event::KeyCode::Char('q') = event.code
+        {
+            self.running = false;
         }
     }
 
@@ -73,81 +44,47 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Line::from(" Async Counter Application ");
-        let instructions = Line::from(vec![
-            " Start ".into(),
-            "<S>".blue().bold(),
-            " Stop ".into(),
-            "<T>".blue().bold(),
-            " Restart ".into(),
-            "<R>".blue().bold(),
-            " Quit ".into(),
-            "<q>".blue().bold(),
-        ]);
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(instructions.centered())
-            .border_set(border::THICK);
+        let layout = Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .constraints([Constraint::Max(5), Constraint::Min(5)].as_ref())
+            .split(area);
 
-        let counter_text = Text::from(vec![Line::from(vec![
-            "Value: ".into(),
-            self.counter.to_string().yellow(),
-        ])]);
+        Paragraph::new(vec![
+            Line::raw("Listening on 0.0.0.0:8888"),
+            Line::raw("Press 'q' to quit."),
+        ])
+        .render(layout[0], buf);
 
-        Paragraph::new(counter_text)
-            .centered()
-            .block(block)
-            .render(area, buf);
-    }
-}
+        let table_header = ["ReqId", "Method", "URL", "Status"]
+            .into_iter()
+            .map(Cell::from)
+            .collect::<Row>();
 
-async fn counter_task(mut cmd_rx: mpsc::Receiver<Command>, counter_tx: mpsc::Sender<u64>) {
-    const INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+        let table_rows = [
+            ["1", "GET", "http://example.com", "200"],
+            ["2", "POST", "http://example.com/api", "201"],
+        ]
+        .into_iter()
+        .map(|row| row.into_iter().map(Cell::from).collect::<Row>());
 
-    let mut counter = 0u64;
-    let mut paused = true;
-    let mut ticker = tokio::time::interval(INTERVAL);
-
-    let _ = counter_tx.send(counter).await;
-
-    loop {
-        tokio::select! {
-            _ = ticker.tick() => {
-                if !paused {
-                    counter += INTERVAL.as_secs();
-                    let _ = counter_tx.send(counter).await;
-                }
-            }
-            cmd = cmd_rx.recv() => {
-                if let Some(cmd) = cmd {
-                    match cmd {
-                        Command::Start => paused = false,
-                        Command::Stop => paused = true,
-                        Command::Restart => {
-                            counter = 0;
-                            let _ = counter_tx.send(counter).await;
-                        }
-                        Command::Quit  => break,
-                    }
-                } else {
-                    break;
-                }
-            }
-        };
+        Table::new(
+            table_rows,
+            [
+                Constraint::Min(8),
+                Constraint::Length(8),
+                Constraint::Percentage(100),
+                Constraint::Length(8),
+            ],
+        )
+        .header(table_header)
+        .render(layout[1], buf);
     }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
-    let (counter_tx, counter_rx) = mpsc::channel::<u64>(32);
-
-    tokio::spawn(async move {
-        counter_task(cmd_rx, counter_tx).await;
-    });
-
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal, counter_rx, cmd_tx).await;
+    let app_result = App::default().run(&mut terminal).await;
     ratatui::restore();
     app_result
 }
