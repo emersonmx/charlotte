@@ -1,9 +1,15 @@
-use crate::waiting_screen::WaitingScreen;
+use crate::{requests_screen::RequestsScreen, waiting_screen::WaitingScreen};
 use async_trait::async_trait;
 use crossterm::event::{Event, EventStream};
 use ratatui::{DefaultTerminal, Frame};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_stream::StreamExt;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScreenRoute {
+    Waiting,
+    Requests,
+}
 
 #[async_trait]
 pub trait Screen {
@@ -13,6 +19,7 @@ pub trait Screen {
 
 pub enum Action {
     Quit,
+    Navigate(ScreenRoute),
 }
 
 pub struct App {
@@ -48,7 +55,8 @@ impl App {
                     .handle_events(&event, &self.action_sender)
                     .await,
                 Some(action) = self.action_receiver.recv() => match action {
-                    Action::Quit => self.running = false,
+                    Action::Quit => self.quit_app(),
+                    Action::Navigate(route) => self.navigate_to(route),
                 },
             }
         }
@@ -58,5 +66,16 @@ impl App {
 
     fn draw(&self, frame: &mut Frame) {
         self.current_screen.draw(frame);
+    }
+
+    fn quit_app(&mut self) {
+        self.running = false;
+    }
+
+    fn navigate_to(&mut self, route: ScreenRoute) {
+        self.current_screen = match route {
+            ScreenRoute::Waiting => Box::new(WaitingScreen::new()),
+            ScreenRoute::Requests => Box::new(RequestsScreen::new()),
+        };
     }
 }
