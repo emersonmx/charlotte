@@ -1,9 +1,8 @@
-use crate::app::{Action, Screen};
+use crate::app::{ControlFlow, Screen};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::widgets::{ScrollbarState, TableState};
 use ratatui::{Frame, text::Text, widgets::Widget};
-use tokio::sync::mpsc::Sender;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestEntryRow {
@@ -61,16 +60,18 @@ impl RequestsScreen {
 
 #[async_trait]
 impl Screen for RequestsScreen {
-    async fn handle_events(&mut self, event: &Event, sender: &Sender<Action>) {
+    async fn handle_events(&mut self, event: &Event) -> ControlFlow {
         #[allow(clippy::single_match)]
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
-                    let _ = sender.send(Action::Quit).await;
+                    return ControlFlow::Break;
                 }
             }
             _ => {}
-        }
+        };
+
+        ControlFlow::Continue
     }
 
     fn draw(&self, frame: &mut Frame) {

@@ -2,8 +2,14 @@ use crate::{requests_screen::RequestsScreen, waiting_screen::WaitingScreen};
 use async_trait::async_trait;
 use crossterm::event::{Event, EventStream};
 use ratatui::{DefaultTerminal, Frame};
-use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_stream::StreamExt;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ControlFlow {
+    Navigate(ScreenRoute),
+    Continue,
+    Break,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScreenRoute {
@@ -13,32 +19,19 @@ pub enum ScreenRoute {
 
 #[async_trait]
 pub trait Screen {
-    async fn handle_events(&mut self, event: &Event, sender: &Sender<Action>);
+    async fn handle_events(&mut self, event: &Event) -> ControlFlow;
     fn draw(&self, frame: &mut Frame);
-}
-
-pub enum Action {
-    Quit,
-    Navigate(ScreenRoute),
 }
 
 pub struct App {
     running: bool,
-    action_sender: Sender<Action>,
-    action_receiver: Receiver<Action>,
     current_screen: Box<dyn Screen>,
 }
 
 impl App {
-    const APP_ACTION_CHANNEL_CAPACITY: usize = 100;
-
     pub fn new() -> Self {
-        let (action_sender, action_receiver) =
-            tokio::sync::mpsc::channel(Self::APP_ACTION_CHANNEL_CAPACITY);
         Self {
             running: false,
-            action_sender,
-            action_receiver,
             current_screen: Box::new(WaitingScreen::new()),
         }
     }
@@ -50,14 +43,22 @@ impl App {
         while self.running {
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
-            tokio::select! {
-                Some(Ok(event)) = events.next() => self.current_screen
-                    .handle_events(&event, &self.action_sender)
-                    .await,
-                Some(action) = self.action_receiver.recv() => match action {
-                    Action::Quit => self.quit_app(),
-                    Action::Navigate(route) => self.navigate_to(route),
-                },
+            loop {
+                tokio::select! {
+                    Some(Ok(event)) = events.next() => {
+                        match self.current_screen.handle_events(&event).await {
+                            ControlFlow::Navigate(route) => self.navigate_to(route),
+                            ControlFlow::Continue => {}
+                            ControlFlow::Break => {
+                                self.quit_app();
+                                break;
+                            }
+                        }
+                    }
+                    else => {
+                        break;
+                    }
+                }
             }
         }
 

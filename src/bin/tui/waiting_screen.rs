@@ -1,8 +1,7 @@
-use crate::app::{Action, Screen};
+use crate::app::{ControlFlow, Screen};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::{Frame, text::Text, widgets::Widget};
-use tokio::sync::mpsc::Sender;
 
 #[derive(Debug)]
 pub struct WaitingScreen;
@@ -15,16 +14,18 @@ impl WaitingScreen {
 
 #[async_trait]
 impl Screen for WaitingScreen {
-    async fn handle_events(&mut self, event: &Event, sender: &Sender<Action>) {
+    async fn handle_events(&mut self, event: &Event) -> ControlFlow {
         #[allow(clippy::single_match)]
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
-                    let _ = sender.send(Action::Quit).await;
+                    return ControlFlow::Break;
                 }
             }
             _ => {}
-        }
+        };
+
+        ControlFlow::Continue
     }
 
     fn draw(&self, frame: &mut Frame) {
