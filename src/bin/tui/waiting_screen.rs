@@ -1,10 +1,10 @@
-use crate::app::{ControlFlow, Screen};
+use crate::app::{ControlFlow, Screen, ScreenRoute};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::{
     Frame,
     text::Text,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Paragraph},
 };
 
 #[derive(Debug)]
@@ -24,6 +24,9 @@ impl Screen for WaitingScreen {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
                     return ControlFlow::Break;
+                }
+                if let event::KeyCode::Char('r') = key_event.code {
+                    return ControlFlow::Navigate(ScreenRoute::Requests);
                 }
             }
             _ => {}

@@ -2,7 +2,7 @@ use crate::app::{ControlFlow, Screen};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::widgets::{ScrollbarState, TableState};
-use ratatui::{Frame, text::Text, widgets::Widget};
+use ratatui::{Frame, text::Text};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestEntryRow {
@@ -75,7 +75,7 @@ impl Screen for RequestsScreen {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let text = Text::raw("Waiting for requests on port 8888... (press 'q' to quit)").centered();
-        text.render(frame.area(), frame.buffer_mut());
+        let text = Text::raw("REQUESTS SCREEN").centered();
+        frame.render_widget(text, frame.area());
     }
 }
