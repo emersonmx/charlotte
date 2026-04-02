@@ -49,10 +49,10 @@ impl App {
 
         while self.running {
             if !self.has_current_screen_route() {
-                return Err(anyhow::anyhow!(format!(
+                return Err(anyhow::anyhow!(
                     "Screen `{:?}` not found in screen router",
                     self.current_screen_route
-                )));
+                ));
             }
 
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
