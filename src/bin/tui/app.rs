@@ -9,7 +9,7 @@ use tokio_stream::StreamExt;
 pub enum ControlFlow {
     Navigate(ScreenRoute),
     Continue,
-    Break,
+    Quit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -69,7 +69,7 @@ impl App {
                                 self.navigate_to(route);
                                 break;
                             },
-                            ControlFlow::Break => {
+                            ControlFlow::Quit => {
                                 self.quit_app();
                                 break;
                             },

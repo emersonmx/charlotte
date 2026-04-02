@@ -65,7 +65,7 @@ impl Screen for RequestsScreen {
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
-                    return ControlFlow::Break;
+                    return ControlFlow::Quit;
                 }
             }
             _ => {}

@@ -23,7 +23,7 @@ impl Screen for WaitingScreen {
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
-                    return ControlFlow::Break;
+                    return ControlFlow::Quit;
                 }
                 if let event::KeyCode::Char('r') = key_event.code {
                     return ControlFlow::Navigate(ScreenRoute::Requests);
