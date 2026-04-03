@@ -1,5 +1,6 @@
 use crate::{
     navigation::{Navigator, Screen, ScreenId},
+    requests_screen::RequestsScreen,
     waiting_screen::WaitingScreen,
 };
 use crossterm::event::EventStream;
@@ -88,7 +89,7 @@ impl App {
     fn show_screen(&mut self, screen_id: ScreenId) {
         let screen: Box<dyn Screen> = match screen_id {
             ScreenId::Waiting => Box::new(WaitingScreen::new()),
-            ScreenId::Requests => Box::new(crate::requests_screen::RequestsScreen::new()),
+            ScreenId::Requests => Box::new(RequestsScreen::new()),
         };
         self.navigator.show_screen(screen);
     }
