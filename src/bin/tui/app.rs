@@ -21,7 +21,7 @@ pub struct App {
 impl App {
     pub fn new() -> Self {
         let mut navigator = Navigator::new();
-        navigator.push(Box::new(WaitingScreen::new()));
+        navigator.show_screen(Box::new(WaitingScreen::new()));
 
         Self {
             running: false,
@@ -93,6 +93,6 @@ impl App {
     }
 
     fn go_back(&mut self) {
-        self.navigator.pop();
+        self.navigator.go_back();
     }
 }

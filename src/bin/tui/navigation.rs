@@ -34,11 +34,7 @@ impl Navigator {
         }
     }
 
-    pub fn push(&mut self, screen: Box<dyn Screen>) {
-        self.stack.push(screen);
-    }
-
-    pub fn pop(&mut self) {
+    pub fn go_back(&mut self) {
         self.stack.pop();
     }
 
