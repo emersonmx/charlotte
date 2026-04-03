@@ -42,12 +42,13 @@ impl App {
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
             while self.navigator.has_screen() {
+                let screen = match self.navigator.current_mut() {
+                    Some(screen) => screen,
+                    None => break,
+                };
+
                 tokio::select! {
                     Some(Ok(event)) = events.next() => {
-                        let screen = match self.navigator.current_mut() {
-                            Some(screen) => screen,
-                            None => break,
-                        };
                         if let Some(action) = screen.handle_event(&event).await {
                             self.handle_action(action);
                             break;
