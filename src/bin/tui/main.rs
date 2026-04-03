@@ -2,6 +2,7 @@ use crate::app::App;
 
 mod app;
 mod data;
+mod navigation;
 mod requests_screen;
 mod waiting_screen;
 

@@ -1,4 +1,7 @@
-use crate::app::{Action, Screen, ScreenRoute};
+use crate::{
+    app::Action,
+    navigation::{Screen, ScreenId},
+};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::{
@@ -18,6 +21,10 @@ impl WaitingScreen {
 
 #[async_trait]
 impl Screen for WaitingScreen {
+    fn id(&self) -> ScreenId {
+        ScreenId::Waiting
+    }
+
     async fn handle_event(&mut self, event: &Event) -> Option<Action> {
         #[allow(clippy::single_match)]
         match event {
@@ -26,7 +33,7 @@ impl Screen for WaitingScreen {
                     return Some(Action::Exit);
                 }
                 if let event::KeyCode::Char('r') = key_event.code {
-                    return Some(Action::Navigate(ScreenRoute::Requests));
+                    return Some(Action::ShowScreen(ScreenId::Requests));
                 }
             }
             _ => {}

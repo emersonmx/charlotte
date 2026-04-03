@@ -1,4 +1,5 @@
-use crate::app::{Action, Screen};
+use crate::app::Action;
+use crate::navigation::{Screen, ScreenId};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::widgets::{ScrollbarState, TableState};
@@ -60,12 +61,19 @@ impl RequestsScreen {
 
 #[async_trait]
 impl Screen for RequestsScreen {
+    fn id(&self) -> ScreenId {
+        ScreenId::Requests
+    }
+
     async fn handle_event(&mut self, event: &Event) -> Option<Action> {
         #[allow(clippy::single_match)]
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
                     return Some(Action::Exit);
+                }
+                if let event::KeyCode::Char('b') = key_event.code {
+                    return Some(Action::GoBack);
                 }
             }
             _ => {}

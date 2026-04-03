@@ -1,44 +1,31 @@
-use crate::{requests_screen::RequestsScreen, waiting_screen::WaitingScreen};
-use async_trait::async_trait;
-use crossterm::event::{Event, EventStream};
+use crate::{
+    navigation::{Navigator, Screen, ScreenId},
+    waiting_screen::WaitingScreen,
+};
+use crossterm::event::EventStream;
 use ratatui::{DefaultTerminal, Frame};
-use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
-    Navigate(ScreenRoute),
+    ShowScreen(ScreenId),
+    GoBack,
     Exit,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ScreenRoute {
-    Waiting,
-    Requests,
-}
-
-#[async_trait]
-pub trait Screen {
-    async fn handle_event(&mut self, event: &Event) -> Option<Action>;
-    fn draw(&self, frame: &mut Frame);
-}
-
 pub struct App {
+    navigator: Navigator,
     running: bool,
-    current_screen_route: ScreenRoute,
-    screen_router: HashMap<ScreenRoute, Box<dyn Screen>>,
 }
 
 impl App {
     pub fn new() -> Self {
-        let mut router: HashMap<ScreenRoute, Box<dyn Screen>> = HashMap::new();
-        router.insert(ScreenRoute::Waiting, Box::new(WaitingScreen::new()));
-        router.insert(ScreenRoute::Requests, Box::new(RequestsScreen::new()));
+        let mut navigator = Navigator::new();
+        navigator.push(Box::new(WaitingScreen::new()));
 
         Self {
             running: false,
-            current_screen_route: ScreenRoute::Waiting,
-            screen_router: router,
+            navigator,
         }
     }
 
@@ -47,24 +34,23 @@ impl App {
         let mut events = EventStream::new();
 
         while self.running {
-            if !self.has_current_screen_route() {
-                return Err(anyhow::anyhow!(
-                    "Screen `{:?}` not found in screen router",
-                    self.current_screen_route
-                ));
+            if !self.navigator.has_screen() {
+                self.exit();
+                continue;
             }
 
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
-            while self.has_current_screen_route() {
+            while self.navigator.has_screen() {
                 tokio::select! {
                     Some(Ok(event)) = events.next() => {
-                        let current_screen = match self.screen_router.get_mut(&self.current_screen_route) {
+                        let screen = match self.navigator.current_mut() {
                             Some(screen) => screen,
                             None => break,
                         };
-                        if let Some(action) = current_screen.handle_event(&event).await {
+                        if let Some(action) = screen.handle_event(&event).await {
                             self.handle_action(action);
+                            break;
                         }
                     }
                     else => {
@@ -78,28 +64,35 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        let current_screen = self.screen_router.get(&self.current_screen_route);
-        if let Some(current_screen) = current_screen {
-            current_screen.draw(frame);
-        }
+        let screen = match self.navigator.current() {
+            Some(screen) => screen,
+            None => return,
+        };
+
+        screen.draw(frame);
     }
 
     fn handle_action(&mut self, action: Action) {
         match action {
-            Action::Navigate(route) => self.navigate_to(route),
             Action::Exit => self.exit(),
+            Action::ShowScreen(screen_id) => self.show_screen(screen_id),
+            Action::GoBack => self.go_back(),
         }
-    }
-
-    fn has_current_screen_route(&self) -> bool {
-        self.screen_router.contains_key(&self.current_screen_route)
     }
 
     fn exit(&mut self) {
         self.running = false;
     }
 
-    fn navigate_to(&mut self, route: ScreenRoute) {
-        self.current_screen_route = route;
+    fn show_screen(&mut self, screen_id: ScreenId) {
+        let screen: Box<dyn Screen> = match screen_id {
+            ScreenId::Waiting => Box::new(WaitingScreen::new()),
+            ScreenId::Requests => Box::new(crate::requests_screen::RequestsScreen::new()),
+        };
+        self.navigator.show_screen(screen);
+    }
+
+    fn go_back(&mut self) {
+        self.navigator.pop();
     }
 }
