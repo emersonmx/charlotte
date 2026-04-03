@@ -6,10 +6,9 @@ use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ControlFlow {
+pub enum Action {
     Navigate(ScreenRoute),
-    Continue,
-    Quit,
+    Exit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -20,7 +19,7 @@ pub enum ScreenRoute {
 
 #[async_trait]
 pub trait Screen {
-    async fn handle_events(&mut self, event: &Event) -> ControlFlow;
+    async fn handle_event(&mut self, event: &Event) -> Option<Action>;
     fn draw(&self, frame: &mut Frame);
 }
 
@@ -64,16 +63,8 @@ impl App {
                             Some(screen) => screen,
                             None => break,
                         };
-                        match current_screen.handle_events(&event).await {
-                            ControlFlow::Navigate(route) => {
-                                self.navigate_to(route);
-                                break;
-                            },
-                            ControlFlow::Quit => {
-                                self.quit_app();
-                                break;
-                            },
-                            _ => {}
+                        if let Some(action) = current_screen.handle_event(&event).await {
+                            self.handle_action(action);
                         }
                     }
                     else => {
@@ -93,11 +84,18 @@ impl App {
         }
     }
 
+    fn handle_action(&mut self, action: Action) {
+        match action {
+            Action::Navigate(route) => self.navigate_to(route),
+            Action::Exit => self.exit(),
+        }
+    }
+
     fn has_current_screen_route(&self) -> bool {
         self.screen_router.contains_key(&self.current_screen_route)
     }
 
-    fn quit_app(&mut self) {
+    fn exit(&mut self) {
         self.running = false;
     }
 

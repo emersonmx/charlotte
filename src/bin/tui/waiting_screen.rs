@@ -1,4 +1,4 @@
-use crate::app::{ControlFlow, Screen, ScreenRoute};
+use crate::app::{Action, Screen, ScreenRoute};
 use async_trait::async_trait;
 use crossterm::event::{self, Event};
 use ratatui::{
@@ -18,21 +18,21 @@ impl WaitingScreen {
 
 #[async_trait]
 impl Screen for WaitingScreen {
-    async fn handle_events(&mut self, event: &Event) -> ControlFlow {
+    async fn handle_event(&mut self, event: &Event) -> Option<Action> {
         #[allow(clippy::single_match)]
         match event {
             Event::Key(key_event) => {
                 if let event::KeyCode::Char('q') = key_event.code {
-                    return ControlFlow::Quit;
+                    return Some(Action::Exit);
                 }
                 if let event::KeyCode::Char('r') = key_event.code {
-                    return ControlFlow::Navigate(ScreenRoute::Requests);
+                    return Some(Action::Navigate(ScreenRoute::Requests));
                 }
             }
             _ => {}
         };
 
-        ControlFlow::Continue
+        None
     }
 
     fn draw(&self, frame: &mut Frame) {
