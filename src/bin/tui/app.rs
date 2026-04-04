@@ -9,6 +9,11 @@ use std::net::SocketAddr;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
 
+pub enum Event {
+    CrosstermEvent(crossterm::event::Event),
+    ProxyMessage(Box<charlotte::Message>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     ShowScreen(ScreenId),
@@ -73,13 +78,16 @@ impl App {
 
                 tokio::select! {
                     Some(Ok(event)) = events.next() => {
-                        if let Some(action) = screen.handle_event(&event).await {
+                        if let Some(action) = screen.handle_event(&Event::CrosstermEvent(event)).await {
                             self.handle_action(action).await;
                             break;
                         }
                     }
                     Some(message) = message_rx.recv() => {
-                        let _ = message;
+                        if let Some(action) = screen.handle_event(&Event::ProxyMessage(Box::new(message))).await {
+                            self.handle_action(action).await;
+                            break;
+                        }
                     }
                     result = &mut abort_app_rx => {
                         match result {

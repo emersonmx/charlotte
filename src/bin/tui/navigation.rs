@@ -1,6 +1,5 @@
-use crate::app::Action;
+use crate::app::{Action, Event};
 use async_trait::async_trait;
-use crossterm::event::Event;
 use ratatui::Frame;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
