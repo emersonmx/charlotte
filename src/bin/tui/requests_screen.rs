@@ -144,6 +144,13 @@ impl Screen for RequestsScreen {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
+        let header = RequestEntryRow {
+            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
+            method: Self::TABLE_COLUMN_METHOD.to_string(),
+            url: Self::TABLE_COLUMN_URL.to_string(),
+            body: Self::TABLE_COLUMN_BODY.to_string(),
+            status: Self::TABLE_COLUMN_STATUS.to_string(),
+        };
         let rows = self.requests.values().map(|entry| {
             let status = if let Some(response) = &entry.response {
                 response.status.to_string()
@@ -159,6 +166,7 @@ impl Screen for RequestsScreen {
                 status,
             }
         });
+
         let table = Table::new(
             rows,
             &[
@@ -169,16 +177,7 @@ impl Screen for RequestsScreen {
                 Constraint::Length(self.column_widths.status + 2),
             ],
         )
-        .header(
-            RequestEntryRow {
-                request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
-                method: Self::TABLE_COLUMN_METHOD.to_string(),
-                url: Self::TABLE_COLUMN_URL.to_string(),
-                body: Self::TABLE_COLUMN_BODY.to_string(),
-                status: Self::TABLE_COLUMN_STATUS.to_string(),
-            }
-            .into(),
-        );
+        .header(header.into());
         frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
 }
