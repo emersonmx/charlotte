@@ -165,17 +165,20 @@ impl Screen for RequestsScreen {
                 Constraint::Length(self.column_widths.request_id + 2),
                 Constraint::Length(self.column_widths.method + 2),
                 Constraint::Length(self.column_widths.url + 2),
-                Constraint::Length(self.column_widths.body + 2),
+                Constraint::Min(self.column_widths.body + 2),
                 Constraint::Length(self.column_widths.status + 2),
             ],
         )
-        .header(Row::new(vec![
-            Cell::from(Text::from(Self::TABLE_COLUMN_REQ_ID).alignment(Alignment::Right)),
-            Cell::from(Self::TABLE_COLUMN_METHOD),
-            Cell::from(Self::TABLE_COLUMN_URL),
-            Cell::from(Self::TABLE_COLUMN_BODY),
-            Cell::from(Self::TABLE_COLUMN_STATUS),
-        ]));
+        .header(
+            RequestEntryRow {
+                request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
+                method: Self::TABLE_COLUMN_METHOD.to_string(),
+                url: Self::TABLE_COLUMN_URL.to_string(),
+                body: Self::TABLE_COLUMN_BODY.to_string(),
+                status: Self::TABLE_COLUMN_STATUS.to_string(),
+            }
+            .into(),
+        );
         frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
 }
