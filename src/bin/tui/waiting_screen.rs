@@ -6,10 +6,17 @@ use async_trait::async_trait;
 use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
+    layout::Rect,
     text::Text,
     widgets::{Block, Paragraph},
 };
 use std::sync::Arc;
+
+fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect::new(x, y, width, height)
+}
 
 #[derive(Debug)]
 pub struct WaitingScreen {
@@ -59,17 +66,14 @@ impl Screen for WaitingScreen {
             "Waiting for requests on {}:{} (press 'q' to quit)",
             self.server_host, self.server_port
         );
-        let text = Text::raw(&message);
-        let block = Block::bordered();
-        let paragraph = Paragraph::new(text).centered().block(block);
-
-        let area = frame.area();
         let (xpad, ypad) = (4, 1);
         let width = message.chars().count() as u16 + xpad;
         let height = ypad + 2;
-        let x = area.x + (area.width - width) / 2;
-        let y = area.y + (area.height - height) / 2;
-        let centered_area = ratatui::layout::Rect::new(x, y, width, height);
+        let centered_area = centered_area(frame.area(), width, height);
+
+        let text = Text::from(message);
+        let block = Block::bordered();
+        let paragraph = Paragraph::new(text).centered().block(block);
 
         frame.render_widget(paragraph, centered_area);
     }
