@@ -5,7 +5,8 @@ use charlotte::{Request, RequestId, Response};
 use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
-    layout::Constraint,
+    layout::{Alignment, Constraint},
+    text::Text,
     widgets::{Cell, Row, Table, TableState},
 };
 use std::collections::BTreeMap;
@@ -29,7 +30,7 @@ struct RequestEntryRow {
 impl From<RequestEntryRow> for Row<'_> {
     fn from(row: RequestEntryRow) -> Self {
         Row::new(vec![
-            Cell::from(row.request_id),
+            Cell::from(Text::from(row.request_id).alignment(Alignment::Right)),
             Cell::from(row.method),
             Cell::from(row.url),
             Cell::from(row.body),
@@ -169,7 +170,7 @@ impl Screen for RequestsScreen {
             ],
         )
         .header(Row::new(vec![
-            Cell::from(Self::TABLE_COLUMN_REQ_ID),
+            Cell::from(Text::from(Self::TABLE_COLUMN_REQ_ID).alignment(Alignment::Right)),
             Cell::from(Self::TABLE_COLUMN_METHOD),
             Cell::from(Self::TABLE_COLUMN_URL),
             Cell::from(Self::TABLE_COLUMN_BODY),
