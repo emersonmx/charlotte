@@ -1,4 +1,3 @@
-pub use proxy::Error;
-pub use proxy::serve;
+pub use proxy::{Error, Message, serve};
 
 mod proxy;

@@ -24,13 +24,13 @@ pub type Response = hyper::Response<BoxBody<Bytes, Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("io error")]
+    #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("hyper error")]
+    #[error("hyper error: {0}")]
     Hyper(#[from] hyper::Error),
-    #[error("http error")]
+    #[error("http error: {0}")]
     Http(#[from] hyper::http::Error),
-    #[error("invalid uri")]
+    #[error("invalid uri: {0}")]
     InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
