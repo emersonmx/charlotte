@@ -38,7 +38,6 @@ pub enum Error {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
-    pub id: RequestId,
     pub method: String,
     pub url: String,
     pub headers: Vec<(String, String)>,
@@ -47,7 +46,6 @@ pub struct Request {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Response {
-    pub request_id: RequestId,
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
@@ -174,7 +172,6 @@ async fn handle_regular(
     let channel_body = boxed_body_from_bytes(body);
 
     let request = Request {
-        id: request_id,
         method: parts.method.to_string(),
         url: parts.uri.to_string(),
         headers: parts
@@ -203,7 +200,6 @@ async fn handle_regular(
     let channel_body = boxed_body_from_bytes(body);
 
     let response = Response {
-        request_id,
         status: parts.status.as_u16(),
         headers: parts
             .headers
