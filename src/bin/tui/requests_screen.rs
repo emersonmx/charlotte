@@ -2,9 +2,11 @@ use crate::app::{Action, Event};
 use crate::data::RequestEntry;
 use crate::navigation::{Screen, ScreenId};
 use async_trait::async_trait;
+use charlotte::RequestId;
 use crossterm::event::KeyCode;
 use ratatui::widgets::{ScrollbarState, TableState};
 use ratatui::{Frame, text::Text};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestEntryRow {
@@ -33,7 +35,7 @@ impl RequestTableColumnWidths {
 
 #[derive(Debug)]
 pub struct RequestsScreen {
-    requests: Vec<RequestEntry>,
+    requests: BTreeMap<RequestId, RequestEntry>,
     column_widths: RequestTableColumnWidths,
     table_state: TableState,
     table_scroll_state: ScrollbarState,
@@ -54,7 +56,7 @@ impl RequestsScreen {
             body: Self::TABLE_COLUMN_BODY.to_string(),
         });
         Self {
-            requests: vec![],
+            requests: BTreeMap::new(),
             column_widths,
             table_state: TableState::default().with_selected(Some(0)),
             table_scroll_state: ScrollbarState::default().content_length(0),
@@ -80,7 +82,22 @@ impl Screen for RequestsScreen {
                     }
                 }
             }
-            Event::ProxyMessage(_) => {}
+            Event::ProxyMessage(message) => match message.as_ref() {
+                charlotte::Message::RequestSent((request_id, request)) => {
+                    let request_entry = RequestEntry {
+                        request_id: *request_id,
+                        request: request.clone(),
+                        response: None,
+                    };
+                    self.requests.insert(*request_id, request_entry);
+                }
+                charlotte::Message::ResponseReceived((request_id, response)) => {
+                    if let Some(request_entry) = self.requests.get_mut(request_id) {
+                        request_entry.response = Some(response.clone());
+                    }
+                }
+                _ => {}
+            },
         };
 
         None
