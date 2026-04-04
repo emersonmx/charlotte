@@ -66,9 +66,10 @@ impl Screen for WaitingScreen {
             "Waiting for requests on {}:{} (press 'q' to quit)",
             self.server_host, self.server_port
         );
-        let (xpad, ypad) = (4, 1);
-        let width = message.chars().count() as u16 + xpad;
-        let height = ypad + 2;
+        let border_padding = 2;
+        let (x_padding, y_padding) = (2, 1);
+        let width = message.chars().count() as u16 + (x_padding + border_padding);
+        let height = y_padding + border_padding;
         let centered_area = centered_area(frame.area(), width, height);
 
         let text = Text::from(message);
