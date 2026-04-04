@@ -49,7 +49,7 @@ struct RequestTableColumnWidths {
 }
 
 impl RequestTableColumnWidths {
-    fn update(&mut self, row: &RequestEntryRow) {
+    fn update(&mut self, row: RequestEntryRow) {
         self.request_id = self.request_id.max(row.request_id.len() as u16);
         self.method = self.method.max(row.method.len() as u16);
         self.url = self.url.max(row.url.len() as u16);
@@ -75,7 +75,7 @@ impl RequestsScreen {
 
     pub fn new() -> Self {
         let mut column_widths = RequestTableColumnWidths::default();
-        column_widths.update(&RequestEntryRow {
+        column_widths.update(RequestEntryRow {
             request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
             method: Self::TABLE_COLUMN_METHOD.to_string(),
             url: Self::TABLE_COLUMN_URL.to_string(),
@@ -115,7 +115,7 @@ impl Screen for RequestsScreen {
                         request: request.clone(),
                         response: None,
                     };
-                    self.column_widths.update(&RequestEntryRow {
+                    self.column_widths.update(RequestEntryRow {
                         request_id: request_id.to_string(),
                         method: request.method.clone(),
                         url: request.url.clone(),
@@ -126,7 +126,7 @@ impl Screen for RequestsScreen {
                 }
                 charlotte::Message::ResponseReceived((request_id, response)) => {
                     if let Some(request_entry) = self.requests.get_mut(request_id) {
-                        self.column_widths.update(&RequestEntryRow {
+                        self.column_widths.update(RequestEntryRow {
                             request_id: request_id.to_string(),
                             method: request_entry.request.method.clone(),
                             url: request_entry.request.url.clone(),
