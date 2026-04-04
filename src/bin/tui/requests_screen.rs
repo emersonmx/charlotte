@@ -1,8 +1,7 @@
 use crate::app::{Action, Event};
-use crate::data::RequestEntry;
 use crate::navigation::{Screen, ScreenId};
 use async_trait::async_trait;
-use charlotte::RequestId;
+use charlotte::{Request, RequestId, Response};
 use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
@@ -10,6 +9,13 @@ use ratatui::{
     widgets::{Cell, Row, ScrollbarState, Table, TableState},
 };
 use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RequestEntry {
+    pub request_id: RequestId,
+    pub request: Request,
+    pub response: Option<Response>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestEntryRow {
