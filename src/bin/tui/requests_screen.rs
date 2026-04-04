@@ -23,6 +23,7 @@ struct RequestEntryRow {
     method: String,
     url: String,
     body: String,
+    status: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -31,6 +32,7 @@ struct RequestTableColumnWidths {
     method: u16,
     url: u16,
     body: u16,
+    status: u16,
 }
 
 impl RequestTableColumnWidths {
@@ -39,6 +41,7 @@ impl RequestTableColumnWidths {
         self.method = self.method.max(row.method.len() as u16);
         self.url = self.url.max(row.url.len() as u16);
         self.body = self.body.max(row.body.len() as u16);
+        self.status = self.status.max(row.status.len() as u16);
     }
 }
 
@@ -54,6 +57,8 @@ impl RequestsScreen {
     const TABLE_COLUMN_METHOD: &str = "Method";
     const TABLE_COLUMN_URL: &str = "URL";
     const TABLE_COLUMN_BODY: &str = "Body";
+    const TABLE_COLUMN_STATUS: &str = "Status";
+    const ROW_STATUS_PENDING: &str = "Pending";
 
     pub fn new() -> Self {
         let mut column_widths = RequestTableColumnWidths::default();
@@ -62,6 +67,7 @@ impl RequestsScreen {
             method: Self::TABLE_COLUMN_METHOD.to_string(),
             url: Self::TABLE_COLUMN_URL.to_string(),
             body: Self::TABLE_COLUMN_BODY.to_string(),
+            status: Self::TABLE_COLUMN_STATUS.to_string(),
         });
         Self {
             requests: BTreeMap::new(),
@@ -101,6 +107,7 @@ impl Screen for RequestsScreen {
                         method: request.method.clone(),
                         url: request.url.clone(),
                         body: String::from_utf8_lossy(&request.body).to_string(),
+                        status: Self::ROW_STATUS_PENDING.to_string(),
                     });
                     self.requests.insert(*request_id, request_entry);
                 }
@@ -122,12 +129,18 @@ impl Screen for RequestsScreen {
             let method = entry.request.method.clone();
             let url = entry.request.url.clone();
             let body = String::from_utf8_lossy(&entry.request.body).to_string();
+            let status = if let Some(response) = &entry.response {
+                response.status.to_string()
+            } else {
+                Self::ROW_STATUS_PENDING.to_string()
+            };
 
             Row::new(vec![
                 Cell::from(request_id.clone()),
                 Cell::from(method.clone()),
                 Cell::from(url.clone()),
                 Cell::from(body.clone()),
+                Cell::from(status),
             ])
         });
         let table = Table::new(
@@ -137,6 +150,7 @@ impl Screen for RequestsScreen {
                 Constraint::Length(self.column_widths.method + 2),
                 Constraint::Length(self.column_widths.url + 2),
                 Constraint::Length(self.column_widths.body + 2),
+                Constraint::Length(self.column_widths.status + 2),
             ],
         )
         .header(Row::new(vec![
@@ -144,6 +158,7 @@ impl Screen for RequestsScreen {
             Cell::from(Self::TABLE_COLUMN_METHOD),
             Cell::from(Self::TABLE_COLUMN_URL),
             Cell::from(Self::TABLE_COLUMN_BODY),
+            Cell::from(Self::TABLE_COLUMN_STATUS),
         ]));
         frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
