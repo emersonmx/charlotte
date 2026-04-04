@@ -4,8 +4,11 @@ use crate::navigation::{Screen, ScreenId};
 use async_trait::async_trait;
 use charlotte::RequestId;
 use crossterm::event::KeyCode;
-use ratatui::widgets::{ScrollbarState, TableState};
-use ratatui::{Frame, text::Text};
+use ratatui::{
+    Frame,
+    layout::Constraint,
+    widgets::{Cell, Row, ScrollbarState, Table, TableState},
+};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -18,18 +21,18 @@ struct RequestEntryRow {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestTableColumnWidths {
-    request_id: usize,
-    method: usize,
-    url: usize,
-    body: usize,
+    request_id: u16,
+    method: u16,
+    url: u16,
+    body: u16,
 }
 
 impl RequestTableColumnWidths {
     fn update(&mut self, row: &RequestEntryRow) {
-        self.request_id = self.request_id.max(row.request_id.len());
-        self.method = self.method.max(row.method.len());
-        self.url = self.url.max(row.url.len());
-        self.body = self.body.max(row.body.len());
+        self.request_id = self.request_id.max(row.request_id.len() as u16);
+        self.method = self.method.max(row.method.len() as u16);
+        self.url = self.url.max(row.url.len() as u16);
+        self.body = self.body.max(row.body.len() as u16);
     }
 }
 
@@ -89,6 +92,12 @@ impl Screen for RequestsScreen {
                         request: request.clone(),
                         response: None,
                     };
+                    self.column_widths.update(&RequestEntryRow {
+                        request_id: request_id.to_string(),
+                        method: request.method.clone(),
+                        url: request.url.clone(),
+                        body: String::from_utf8_lossy(&request.body).to_string(),
+                    });
                     self.requests.insert(*request_id, request_entry);
                 }
                 charlotte::Message::ResponseReceived((request_id, response)) => {
@@ -103,8 +112,35 @@ impl Screen for RequestsScreen {
         None
     }
 
-    fn draw(&self, frame: &mut Frame) {
-        let text = Text::raw("REQUESTS SCREEN").centered();
-        frame.render_widget(text, frame.area());
+    fn draw(&mut self, frame: &mut Frame) {
+        let rows = self.requests.values().map(|entry| {
+            let request_id = entry.request_id.to_string();
+            let method = entry.request.method.clone();
+            let url = entry.request.url.clone();
+            let body = String::from_utf8_lossy(&entry.request.body).to_string();
+
+            Row::new(vec![
+                Cell::from(request_id.clone()),
+                Cell::from(method.clone()),
+                Cell::from(url.clone()),
+                Cell::from(body.clone()),
+            ])
+        });
+        let table = Table::new(
+            rows,
+            &[
+                Constraint::Length(self.column_widths.request_id + 2),
+                Constraint::Length(self.column_widths.method + 2),
+                Constraint::Length(self.column_widths.url + 2),
+                Constraint::Length(self.column_widths.body + 2),
+            ],
+        )
+        .header(Row::new(vec![
+            Cell::from(Self::TABLE_COLUMN_REQ_ID),
+            Cell::from(Self::TABLE_COLUMN_METHOD),
+            Cell::from(Self::TABLE_COLUMN_URL),
+            Cell::from(Self::TABLE_COLUMN_BODY),
+        ]));
+        frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
 }

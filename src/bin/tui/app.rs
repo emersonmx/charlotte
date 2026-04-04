@@ -70,35 +70,27 @@ impl App {
 
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
-            while self.navigator.has_screen() {
-                let screen = match self.navigator.current_mut() {
-                    Some(screen) => screen,
-                    None => break,
-                };
+            let screen = match self.navigator.current() {
+                Some(screen) => screen,
+                None => break,
+            };
 
-                tokio::select! {
-                    Some(Ok(event)) = events.next() => {
-                        if let Some(action) = screen.handle_event(&Event::CrosstermEvent(event)).await {
-                            self.handle_action(action).await;
-                            break;
-                        }
+            tokio::select! {
+                Some(Ok(event)) = events.next() => {
+                    if let Some(action) = screen.handle_event(&Event::CrosstermEvent(event)).await {
+                        self.handle_action(action).await;
                     }
-                    Some(message) = message_rx.recv() => {
-                        if let Some(action) = screen.handle_event(&Event::ProxyMessage(Box::new(message))).await {
-                            self.handle_action(action).await;
-                            break;
-                        }
+                }
+                Some(message) = message_rx.recv() => {
+                    if let Some(action) = screen.handle_event(&Event::ProxyMessage(Box::new(message))).await {
+                        self.handle_action(action).await;
                     }
-                    result = &mut abort_app_rx => {
-                        match result {
-                            Ok(Err(error)) => self.exit_with_error(anyhow::anyhow!(error.to_string())),
-                            Err(_) =>  self.exit_with_error(anyhow::anyhow!("Server was aborted unexpectedly")),
-                            _ => {}
-                        }
-                        break;
-                    }
-                    else => {
-                        break;
+                }
+                result = &mut abort_app_rx => {
+                    match result {
+                        Ok(Err(error)) => self.exit_with_error(anyhow::anyhow!(error.to_string())),
+                        Err(_) =>  self.exit_with_error(anyhow::anyhow!("Server was aborted unexpectedly")),
+                        _ => {}
                     }
                 }
             }
@@ -113,7 +105,7 @@ impl App {
         Ok(())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let screen = match self.navigator.current() {
             Some(screen) => screen,
             None => return,

@@ -40,7 +40,7 @@ impl Screen for WaitingScreen {
         None
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let message = "Waiting for requests on port 8888... (press 'q' to quit)";
         let text = Text::raw(message);
         let block = Block::bordered();

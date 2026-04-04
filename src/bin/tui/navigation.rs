@@ -12,7 +12,7 @@ pub enum ScreenId {
 pub trait Screen {
     fn id(&self) -> ScreenId;
     async fn handle_event(&mut self, event: &Event) -> Option<Action>;
-    fn draw(&self, frame: &mut Frame);
+    fn draw(&mut self, frame: &mut Frame);
 }
 
 pub struct Navigator {
@@ -41,11 +41,7 @@ impl Navigator {
         !self.stack.is_empty()
     }
 
-    pub fn current(&self) -> Option<&dyn Screen> {
-        self.stack.last().map(|v| &**v)
-    }
-
-    pub fn current_mut(&mut self) -> Option<&mut Box<dyn Screen>> {
+    pub fn current(&mut self) -> Option<&mut Box<dyn Screen>> {
         self.stack.last_mut()
     }
 }
