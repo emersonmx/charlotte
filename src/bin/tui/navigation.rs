@@ -37,10 +37,6 @@ impl Navigator {
         self.stack.pop();
     }
 
-    pub fn has_screen(&self) -> bool {
-        !self.stack.is_empty()
-    }
-
     pub fn current(&mut self) -> Option<&mut Box<dyn Screen>> {
         self.stack.last_mut()
     }

@@ -24,22 +24,21 @@ pub enum Action {
 pub struct App {
     navigator: Navigator,
     abort_server_tx: Option<oneshot::Sender<()>>,
+    server_host: String,
+    server_port: u16,
     running: bool,
     exit_error: Option<anyhow::Error>,
 }
 
 impl App {
-    const SERVER_HOST: &str = "0.0.0.0";
-    const SERVER_PORT: u16 = 8888;
     const MESSAGE_CHANNEL_BUFFER_SIZE: usize = 128;
 
-    pub fn new() -> Self {
-        let mut navigator = Navigator::new();
-        navigator.show_screen(Box::new(WaitingScreen::new()));
-
+    pub fn new(server_host: String, server_port: u16) -> Self {
         Self {
-            navigator,
+            navigator: Navigator::new(),
             abort_server_tx: None,
+            server_host,
+            server_port,
             running: false,
             exit_error: None,
         }
@@ -48,8 +47,10 @@ impl App {
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         let mut events = EventStream::new();
 
+        self.show_screen(ScreenId::Waiting);
+
         let server_addr: SocketAddr =
-            format!("{}:{}", Self::SERVER_HOST, Self::SERVER_PORT).parse()?;
+            format!("{}:{}", self.server_host, self.server_port).parse()?;
         let (abort_server_tx, abort_server_rx) = oneshot::channel();
         let (abort_app_tx, mut abort_app_rx) = oneshot::channel();
         let (message_tx, mut message_rx) = mpsc::channel(Self::MESSAGE_CHANNEL_BUFFER_SIZE);
@@ -63,16 +64,14 @@ impl App {
 
         self.running = true;
         while self.running {
-            if !self.navigator.has_screen() {
-                self.exit();
-                continue;
-            }
-
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
             let screen = match self.navigator.current() {
                 Some(screen) => screen,
-                None => break,
+                None => {
+                    self.exit();
+                    continue;
+                }
             };
 
             tokio::select! {
@@ -136,7 +135,10 @@ impl App {
 
     fn show_screen(&mut self, screen_id: ScreenId) {
         let screen: Box<dyn Screen> = match screen_id {
-            ScreenId::Waiting => Box::new(WaitingScreen::new()),
+            ScreenId::Waiting => Box::new(WaitingScreen::new(
+                self.server_host.clone(),
+                self.server_port,
+            )),
             ScreenId::Requests => Box::new(RequestsScreen::new()),
         };
         self.navigator.show_screen(screen);

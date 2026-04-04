@@ -11,11 +11,17 @@ use ratatui::{
 };
 
 #[derive(Debug)]
-pub struct WaitingScreen;
+pub struct WaitingScreen {
+    server_host: String,
+    server_port: u16,
+}
 
 impl WaitingScreen {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(server_host: String, server_port: u16) -> Self {
+        Self {
+            server_port,
+            server_host,
+        }
     }
 }
 
@@ -41,8 +47,11 @@ impl Screen for WaitingScreen {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
-        let message = "Waiting for requests on port 8888... (press 'q' to quit)";
-        let text = Text::raw(message);
+        let message = format!(
+            "Waiting for requests on {}:{}... (press 'q' to quit)",
+            self.server_host, self.server_port
+        );
+        let text = Text::raw(&message);
         let block = Block::bordered();
         let paragraph = Paragraph::new(text).centered().block(block);
 
