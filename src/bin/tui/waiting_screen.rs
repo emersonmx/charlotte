@@ -3,7 +3,7 @@ use crate::{
     navigation::{Screen, ScreenId},
 };
 use async_trait::async_trait;
-use crossterm::event;
+use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
     text::Text,
@@ -29,10 +29,10 @@ impl Screen for WaitingScreen {
         if let Event::CrosstermEvent(event) = event
             && let crossterm::event::Event::Key(key_event) = event
         {
-            if let event::KeyCode::Char('q') = key_event.code {
+            if let KeyCode::Char('q') = key_event.code {
                 return Some(Action::Exit);
             }
-            if let event::KeyCode::Char('r') = key_event.code {
+            if let KeyCode::Char('r') = key_event.code {
                 return Some(Action::ShowScreen(ScreenId::Requests));
             }
         };
