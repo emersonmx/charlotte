@@ -6,7 +6,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use std::sync::{
     Arc,
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -18,7 +18,7 @@ type IncomingRequest = hyper::Request<hyper::body::Incoming>;
 type IncomingResponse = hyper::Response<hyper::body::Incoming>;
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
-pub type RequestId = u32;
+pub type RequestId = usize;
 pub type Request = hyper::Request<BoxBody<Bytes, Error>>;
 pub type Response = hyper::Response<BoxBody<Bytes, Error>>;
 
@@ -56,7 +56,7 @@ pub async fn serve(
 
     let _ = message_channel.send(Message::ServerStarted).await;
 
-    let request_id_counter = Arc::new(AtomicU32::new(1));
+    let request_id_counter = Arc::new(AtomicUsize::new(1));
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
