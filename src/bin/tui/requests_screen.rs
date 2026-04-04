@@ -26,6 +26,18 @@ struct RequestEntryRow {
     status: String,
 }
 
+impl From<RequestEntryRow> for Row<'_> {
+    fn from(row: RequestEntryRow) -> Self {
+        Row::new(vec![
+            Cell::from(row.request_id),
+            Cell::from(row.method),
+            Cell::from(row.url),
+            Cell::from(row.body),
+            Cell::from(row.status),
+        ])
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 struct RequestTableColumnWidths {
     request_id: u16,
@@ -113,6 +125,13 @@ impl Screen for RequestsScreen {
                 }
                 charlotte::Message::ResponseReceived((request_id, response)) => {
                     if let Some(request_entry) = self.requests.get_mut(request_id) {
+                        self.column_widths.update(&RequestEntryRow {
+                            request_id: request_id.to_string(),
+                            method: request_entry.request.method.clone(),
+                            url: request_entry.request.url.clone(),
+                            body: String::from_utf8_lossy(&request_entry.request.body).to_string(),
+                            status: response.status.to_string(),
+                        });
                         request_entry.response = Some(response.clone());
                     }
                 }
@@ -125,23 +144,19 @@ impl Screen for RequestsScreen {
 
     fn draw(&mut self, frame: &mut Frame) {
         let rows = self.requests.values().map(|entry| {
-            let request_id = entry.request_id.to_string();
-            let method = entry.request.method.clone();
-            let url = entry.request.url.clone();
-            let body = String::from_utf8_lossy(&entry.request.body).to_string();
             let status = if let Some(response) = &entry.response {
                 response.status.to_string()
             } else {
                 Self::ROW_STATUS_PENDING.to_string()
             };
 
-            Row::new(vec![
-                Cell::from(request_id.clone()),
-                Cell::from(method.clone()),
-                Cell::from(url.clone()),
-                Cell::from(body.clone()),
-                Cell::from(status),
-            ])
+            RequestEntryRow {
+                request_id: entry.request_id.to_string(),
+                method: entry.request.method.clone(),
+                url: entry.request.url.clone(),
+                body: String::from_utf8_lossy(&entry.request.body).to_string(),
+                status,
+            }
         });
         let table = Table::new(
             rows,
