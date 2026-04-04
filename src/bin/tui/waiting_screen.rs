@@ -56,7 +56,7 @@ impl Screen for WaitingScreen {
 
     fn draw(&mut self, frame: &mut Frame) {
         let message = format!(
-            "Waiting for requests on {}:{}... (press 'q' to quit)",
+            "Waiting for requests on {}:{} (press 'q' to quit)",
             self.server_host, self.server_port
         );
         let text = Text::raw(&message);
