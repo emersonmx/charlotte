@@ -1,4 +1,5 @@
 use crate::app::{Action, Event};
+use crate::data::RequestEntry;
 use crate::navigation::{Screen, ScreenId};
 use async_trait::async_trait;
 use crossterm::event::KeyCode;
@@ -32,6 +33,7 @@ impl RequestTableColumnWidths {
 
 #[derive(Debug)]
 pub struct RequestsScreen {
+    requests: Vec<RequestEntry>,
     column_widths: RequestTableColumnWidths,
     table_state: TableState,
     table_scroll_state: ScrollbarState,
@@ -52,6 +54,7 @@ impl RequestsScreen {
             body: Self::TABLE_COLUMN_BODY.to_string(),
         });
         Self {
+            requests: vec![],
             column_widths,
             table_state: TableState::default().with_selected(Some(0)),
             table_scroll_state: ScrollbarState::default().content_length(0),
@@ -77,9 +80,7 @@ impl Screen for RequestsScreen {
                     }
                 }
             }
-            Event::ProxyMessage(_message) => {
-                return None;
-            }
+            Event::ProxyMessage(_) => {}
         };
 
         None
