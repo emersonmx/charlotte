@@ -5,20 +5,22 @@ use crate::{
 };
 use crossterm::event::EventStream;
 use ratatui::{DefaultTerminal, Frame};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
 
 pub enum Event {
     CrosstermEvent(crossterm::event::Event),
-    ProxyMessage(Box<charlotte::Message>),
+    ProxyMessage(Arc<charlotte::Message>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum Action {
     ShowScreen(ScreenId),
+    FowardToScreen(ScreenId, Event),
     GoBack,
     Exit,
+    ExitWithError(anyhow::Error),
 }
 
 pub struct App {
@@ -81,7 +83,7 @@ impl App {
                     }
                 }
                 Some(message) = message_rx.recv() => {
-                    if let Some(action) = screen.handle_event(&Event::ProxyMessage(Box::new(message))).await {
+                    if let Some(action) = screen.handle_event(&Event::ProxyMessage(Arc::new(message))).await {
                         self.handle_action(action).await;
                     }
                 }
@@ -114,10 +116,20 @@ impl App {
     }
 
     async fn handle_action(&mut self, action: Action) {
-        match action {
-            Action::Exit => self.exit(),
-            Action::ShowScreen(screen_id) => self.show_screen(screen_id),
-            Action::GoBack => self.go_back(),
+        let mut next_action = Some(action);
+        while let Some(action) = next_action.take() {
+            match action {
+                Action::Exit => self.exit(),
+                Action::ExitWithError(error) => self.exit_with_error(error),
+                Action::GoBack => self.go_back(),
+                Action::ShowScreen(screen_id) => self.show_screen(screen_id),
+                Action::FowardToScreen(screen_id, event) => {
+                    self.show_screen(screen_id);
+                    if let Some(screen) = self.navigator.current() {
+                        next_action = screen.handle_event(&event).await;
+                    }
+                }
+            }
         }
     }
 
