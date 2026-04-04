@@ -19,8 +19,8 @@ type IncomingResponse = hyper::Response<hyper::body::Incoming>;
 type ServerBuilder = hyper::server::conn::http1::Builder;
 
 pub type RequestId = usize;
-pub type Request = hyper::Request<BoxBody<Bytes, Error>>;
-pub type Response = hyper::Response<BoxBody<Bytes, Error>>;
+type HyperRequest = hyper::Request<BoxBody<Bytes, Error>>;
+type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -34,6 +34,23 @@ pub enum Error {
     InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Request {
+    pub id: RequestId,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Response {
+    pub request_id: RequestId,
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -110,7 +127,7 @@ async fn proxy_handle(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
-) -> Result<Response, Error> {
+) -> Result<HyperResponse, Error> {
     match req.method() {
         &Method::CONNECT => handle_connect(req, message_channel, request_id).await,
         _ => handle_regular(req, message_channel, request_id).await,
@@ -121,7 +138,7 @@ async fn handle_connect(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
-) -> Result<Response, Error> {
+) -> Result<HyperResponse, Error> {
     if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
         tokio::spawn(async move {
             match hyper::upgrade::on(req).await {
@@ -142,7 +159,7 @@ async fn handle_connect(
     }
 
     let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
-    let mut res = Response::new(empty);
+    let mut res = HyperResponse::new(empty);
     *res.status_mut() = hyper::StatusCode::OK;
     Ok(res)
 }
@@ -151,32 +168,63 @@ async fn handle_regular(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
-) -> Result<Response, Error> {
+) -> Result<HyperResponse, Error> {
     let (parts, body) = extract_request_parts(req).await?;
     let fetch_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
 
+    let request = Request {
+        id: request_id,
+        method: parts.method.to_string(),
+        url: parts.uri.to_string(),
+        headers: parts
+            .headers
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.as_str().to_string(),
+                    v.to_str()
+                        .unwrap_or("<invalid UTF-8 in header value>")
+                        .to_string(),
+                )
+            })
+            .collect(),
+        body: channel_body.collect().await?.to_bytes().to_vec(),
+    };
+
     let _ = message_channel
-        .send(Message::RequestSent((
-            request_id,
-            Request::from_parts(parts.clone(), channel_body),
-        )))
+        .send(Message::RequestSent((request_id, request)))
         .await;
 
-    let res = fetch(Request::from_parts(parts, fetch_body)).await?;
+    let res = fetch(HyperRequest::from_parts(parts, fetch_body)).await?;
 
     let (parts, body) = extract_response_parts(res).await?;
     let client_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
 
+    let response = Response {
+        request_id,
+        status: parts.status.as_u16(),
+        headers: parts
+            .headers
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.as_str().to_string(),
+                    v.to_str()
+                        .unwrap_or("<invalid UTF-8 in header value>")
+                        .to_string(),
+                )
+            })
+            .collect(),
+        body: channel_body.collect().await?.to_bytes().to_vec(),
+    };
+
     let _ = message_channel
-        .send(Message::ResponseReceived((
-            request_id,
-            Response::from_parts(parts.clone(), channel_body),
-        )))
+        .send(Message::ResponseReceived((request_id, response)))
         .await;
 
-    Ok(Response::from_parts(parts, client_body))
+    Ok(HyperResponse::from_parts(parts, client_body))
 }
 
 fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
@@ -264,7 +312,7 @@ fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
     Full::new(body).map_err(|e| match e {}).boxed()
 }
 
-async fn fetch(req: Request) -> Result<IncomingResponse, Error> {
+async fn fetch(req: HyperRequest) -> Result<IncomingResponse, Error> {
     let (mut parts, body) = req.into_parts();
 
     let addr = get_target_addr(&parts.uri, &parts.headers)?;
@@ -289,7 +337,7 @@ async fn fetch(req: Request) -> Result<IncomingResponse, Error> {
         .map_err(|_| Error::Proxy("Could not parse the host header".to_string()))?;
     let _ = parts.headers.insert(hyper::header::HOST, host_value);
 
-    let req = Request::from_parts(parts, body);
+    let req = HyperRequest::from_parts(parts, body);
     let res = sender.send_request(req).await?;
 
     Ok(res)
