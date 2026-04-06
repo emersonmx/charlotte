@@ -174,7 +174,7 @@ impl App {
             match action {
                 Action::Exit => self.exit(),
                 Action::ExitWithError(error) => self.exit_with_error(error),
-                Action::GoBack => self.go_back(),
+                Action::GoBack => self.navigator.pop(),
                 Action::ShowScreen(screen_id, policy) => self.change_screen(screen_id, policy),
                 Action::FowardToScreen(screen_id, event, policy) => {
                     self.change_screen(screen_id, policy);
@@ -216,9 +216,5 @@ impl App {
             }
             NavigationPolicy::PopTo => self.navigator.pop_to(screen),
         }
-    }
-
-    fn go_back(&mut self) {
-        self.navigator.pop();
     }
 }
