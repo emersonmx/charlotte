@@ -1,6 +1,5 @@
 use crate::{
-    app::{Action, Event},
-    navigation::{Screen, ScreenId},
+    app::{Action, Event, Screen, ScreenId},
     proxy,
 };
 use async_trait::async_trait;
