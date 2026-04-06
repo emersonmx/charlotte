@@ -2,7 +2,7 @@
     cargo build
 
 @run:
-    cargo run --bin tui
+    cargo run --bin charlotte
 
 @gencert:
     cargo run --bin gencert

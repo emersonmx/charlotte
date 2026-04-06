@@ -1,6 +1,7 @@
 use crate::{
     app::{Action, Event},
     navigation::{Screen, ScreenId},
+    proxy,
 };
 use async_trait::async_trait;
 use crossterm::event::KeyCode;
@@ -49,7 +50,7 @@ impl Screen for WaitingScreen {
                 }
             }
             Event::ProxyMessage(message) => {
-                if let charlotte::Message::RequestSent(_) = message.as_ref() {
+                if let proxy::Message::RequestSent(_) = message.as_ref() {
                     return Some(Action::FowardToScreen(
                         ScreenId::Requests,
                         Event::ProxyMessage(Arc::clone(message)),

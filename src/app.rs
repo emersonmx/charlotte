@@ -1,5 +1,6 @@
 use crate::{
     navigation::{Navigator, Screen, ScreenId},
+    proxy,
     requests_screen::RequestsScreen,
     waiting_screen::WaitingScreen,
 };
@@ -11,7 +12,7 @@ use tokio_stream::StreamExt;
 
 pub enum Event {
     CrosstermEvent(crossterm::event::Event),
-    ProxyMessage(Arc<charlotte::Message>),
+    ProxyMessage(Arc<proxy::Message>),
 }
 
 #[allow(dead_code)]
@@ -60,7 +61,7 @@ impl App {
         self.abort_server_tx = Some(abort_server_tx);
 
         let server_handle = tokio::spawn(async move {
-            let result = charlotte::serve(server_addr, message_tx, abort_server_rx).await;
+            let result = proxy::serve(server_addr, message_tx, abort_server_rx).await;
             let _ = abort_app_tx.send(result);
         });
 

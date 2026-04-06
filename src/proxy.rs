@@ -51,6 +51,7 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Message {
     ServerStarted,

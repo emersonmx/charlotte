@@ -5,6 +5,7 @@ use clap::Parser;
 mod app;
 mod cli;
 mod navigation;
+mod proxy;
 mod requests_screen;
 mod waiting_screen;
 

@@ -1,7 +1,9 @@
-use crate::app::{Action, Event};
-use crate::navigation::{Screen, ScreenId};
+use crate::{
+    app::{Action, Event},
+    navigation::{Screen, ScreenId},
+    proxy,
+};
 use async_trait::async_trait;
-use charlotte::{Request, RequestId, Response};
 use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
@@ -13,9 +15,9 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestEntry {
-    pub request_id: RequestId,
-    pub request: Request,
-    pub response: Option<Response>,
+    pub request_id: proxy::RequestId,
+    pub request: proxy::Request,
+    pub response: Option<proxy::Response>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -60,7 +62,7 @@ impl RequestTableColumnWidths {
 
 #[derive(Debug)]
 pub struct RequestsScreen {
-    requests: BTreeMap<RequestId, RequestEntry>,
+    requests: BTreeMap<proxy::RequestId, RequestEntry>,
     column_widths: RequestTableColumnWidths,
     table_state: TableState,
 }
@@ -109,7 +111,7 @@ impl Screen for RequestsScreen {
                 }
             }
             Event::ProxyMessage(message) => match message.as_ref() {
-                charlotte::Message::RequestSent((request_id, request)) => {
+                proxy::Message::RequestSent((request_id, request)) => {
                     let request_entry = RequestEntry {
                         request_id: *request_id,
                         request: request.clone(),
@@ -124,7 +126,7 @@ impl Screen for RequestsScreen {
                     });
                     self.requests.insert(*request_id, request_entry);
                 }
-                charlotte::Message::ResponseReceived((request_id, response)) => {
+                proxy::Message::ResponseReceived((request_id, response)) => {
                     if let Some(request_entry) = self.requests.get_mut(request_id) {
                         self.column_widths.update(RequestEntryRow {
                             request_id: request_id.to_string(),
