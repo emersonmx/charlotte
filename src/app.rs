@@ -70,7 +70,7 @@ pub enum NavigationPolicy {
 #[allow(dead_code)]
 pub enum Action {
     ShowScreen(ScreenId, NavigationPolicy),
-    FowardToScreen(ScreenId, Event, NavigationPolicy),
+    ForwardToScreen(ScreenId, Event, NavigationPolicy),
     GoBack,
     Exit,
     ExitWithError(anyhow::Error),
@@ -176,7 +176,7 @@ impl App {
                 }
                 Action::GoBack => self.navigator.pop(),
                 Action::ShowScreen(screen_id, policy) => self.change_screen(screen_id, policy),
-                Action::FowardToScreen(screen_id, event, policy) => {
+                Action::ForwardToScreen(screen_id, event, policy) => {
                     self.change_screen(screen_id, policy);
                     if let Some(screen) = self.navigator.current() {
                         next_action = screen.handle_event(&event).await;

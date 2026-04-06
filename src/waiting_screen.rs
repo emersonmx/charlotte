@@ -50,7 +50,7 @@ impl Screen for WaitingScreen {
             }
             Event::ProxyMessage(message) => {
                 if let proxy::Message::RequestSent(_) = message.as_ref() {
-                    return Some(Action::FowardToScreen(
+                    return Some(Action::ForwardToScreen(
                         ScreenId::Requests,
                         Event::ProxyMessage(Arc::clone(message)),
                         NavigationPolicy::Clear,
