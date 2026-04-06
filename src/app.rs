@@ -16,9 +16,17 @@ pub enum Event {
 }
 
 #[allow(dead_code)]
+pub enum NavigationPolicy {
+    Push,
+    Pop,
+    PopTo,
+    Clear,
+}
+
+#[allow(dead_code)]
 pub enum Action {
-    ShowScreen(ScreenId),
-    FowardToScreen(ScreenId, Event),
+    ShowScreen(ScreenId, NavigationPolicy),
+    FowardToScreen(ScreenId, Event, NavigationPolicy),
     GoBack,
     Exit,
     ExitWithError(anyhow::Error),
@@ -50,7 +58,7 @@ impl App {
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         let mut events = EventStream::new();
 
-        self.show_screen(ScreenId::Waiting);
+        self.change_screen(ScreenId::Waiting, NavigationPolicy::Push);
 
         let server_addr: SocketAddr =
             format!("{}:{}", self.server_host, self.server_port).parse()?;
@@ -123,9 +131,9 @@ impl App {
                 Action::Exit => self.exit(),
                 Action::ExitWithError(error) => self.exit_with_error(error),
                 Action::GoBack => self.go_back(),
-                Action::ShowScreen(screen_id) => self.show_screen(screen_id),
-                Action::FowardToScreen(screen_id, event) => {
-                    self.show_screen(screen_id);
+                Action::ShowScreen(screen_id, policy) => self.change_screen(screen_id, policy),
+                Action::FowardToScreen(screen_id, event, policy) => {
+                    self.change_screen(screen_id, policy);
                     if let Some(screen) = self.navigator.current() {
                         next_action = screen.handle_event(&event).await;
                     }
@@ -146,7 +154,7 @@ impl App {
         self.exit_error = Some(error);
     }
 
-    fn show_screen(&mut self, screen_id: ScreenId) {
+    fn change_screen(&mut self, screen_id: ScreenId, policy: NavigationPolicy) {
         let screen: Box<dyn Screen> = match screen_id {
             ScreenId::Waiting => Box::new(WaitingScreen::new(
                 self.server_host.clone(),
@@ -154,10 +162,19 @@ impl App {
             )),
             ScreenId::Requests => Box::new(RequestsScreen::new()),
         };
-        self.navigator.show_screen(screen);
+
+        match policy {
+            NavigationPolicy::Push => self.navigator.push(screen),
+            NavigationPolicy::Pop => self.navigator.pop(),
+            NavigationPolicy::Clear => {
+                self.navigator.clear();
+                self.navigator.push(screen);
+            }
+            NavigationPolicy::PopTo => self.navigator.pop_to(screen),
+        }
     }
 
     fn go_back(&mut self) {
-        self.navigator.go_back();
+        self.navigator.pop();
     }
 }

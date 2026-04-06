@@ -24,17 +24,25 @@ impl Navigator {
         Self { stack: vec![] }
     }
 
-    pub fn show_screen(&mut self, screen: Box<dyn Screen>) {
+    pub fn push(&mut self, screen: Box<dyn Screen>) {
+        self.stack.push(screen);
+    }
+
+    pub fn pop(&mut self) {
+        self.stack.pop();
+    }
+
+    pub fn pop_to(&mut self, screen: Box<dyn Screen>) {
         let screen_id = screen.id();
         if let Some(pos) = self.stack.iter().position(|s| s.id() == screen_id) {
             self.stack.truncate(pos + 1);
         } else {
-            self.stack.push(screen);
+            self.push(screen);
         }
     }
 
-    pub fn go_back(&mut self) {
-        self.stack.pop();
+    pub fn clear(&mut self) {
+        self.stack.clear();
     }
 
     pub fn current(&mut self) -> Option<&mut Box<dyn Screen>> {

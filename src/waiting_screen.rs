@@ -1,5 +1,5 @@
 use crate::{
-    app::{Action, Event},
+    app::{Action, Event, NavigationPolicy},
     navigation::{Screen, ScreenId},
     proxy,
 };
@@ -54,6 +54,7 @@ impl Screen for WaitingScreen {
                     return Some(Action::FowardToScreen(
                         ScreenId::Requests,
                         Event::ProxyMessage(Arc::clone(message)),
+                        NavigationPolicy::Clear,
                     ));
                 }
             }
