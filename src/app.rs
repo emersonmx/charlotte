@@ -82,7 +82,6 @@ pub struct App {
     server_host: String,
     server_port: u16,
     running: bool,
-    exit_error: Option<anyhow::Error>,
 }
 
 impl App {
@@ -95,7 +94,6 @@ impl App {
             server_host,
             server_port,
             running: false,
-            exit_error: None,
         }
     }
 
@@ -132,18 +130,24 @@ impl App {
             tokio::select! {
                 Some(Ok(event)) = events.next() => {
                     if let Some(action) = screen.handle_event(&Event::CrosstermEvent(event)).await {
-                        self.handle_action(action).await;
+                        self.handle_action(action).await?;
                     }
                 }
                 Some(message) = message_rx.recv() => {
                     if let Some(action) = screen.handle_event(&Event::ProxyMessage(Arc::new(message))).await {
-                        self.handle_action(action).await;
+                        self.handle_action(action).await?;
                     }
                 }
                 result = &mut abort_app_rx => {
                     match result {
-                        Ok(Err(error)) => self.exit_with_error(anyhow::anyhow!(error.to_string())),
-                        Err(_) =>  self.exit_with_error(anyhow::anyhow!("Server was aborted unexpectedly")),
+                        Ok(Err(error)) => {
+                            self.exit();
+                            return Err(anyhow::anyhow!(error.to_string()));
+                        },
+                        Err(_) =>  {
+                            self.exit();
+                            return Err(anyhow::anyhow!("Server was aborted unexpectedly"))
+                        },
                         _ => {}
                     }
                 }
@@ -151,10 +155,6 @@ impl App {
         }
 
         server_handle.await?;
-
-        if let Some(error) = self.exit_error.take() {
-            return Err(error);
-        }
 
         Ok(())
     }
@@ -165,12 +165,15 @@ impl App {
         }
     }
 
-    async fn handle_action(&mut self, action: Action) {
+    async fn handle_action(&mut self, action: Action) -> anyhow::Result<()> {
         let mut next_action = Some(action);
         while let Some(action) = next_action.take() {
             match action {
                 Action::Exit => self.exit(),
-                Action::ExitWithError(error) => self.exit_with_error(error),
+                Action::ExitWithError(error) => {
+                    self.exit();
+                    return Err(error);
+                }
                 Action::GoBack => self.navigator.pop(),
                 Action::ShowScreen(screen_id, policy) => self.change_screen(screen_id, policy),
                 Action::FowardToScreen(screen_id, event, policy) => {
@@ -181,6 +184,8 @@ impl App {
                 }
             }
         }
+
+        Ok(())
     }
 
     fn exit(&mut self) {
@@ -188,11 +193,6 @@ impl App {
         if let Some(abort_channel) = self.abort_server_tx.take() {
             let _ = abort_channel.send(());
         }
-    }
-
-    fn exit_with_error(&mut self, error: anyhow::Error) {
-        self.exit();
-        self.exit_error = Some(error);
     }
 
     fn change_screen(&mut self, screen_id: ScreenId, policy: NavigationPolicy) {
