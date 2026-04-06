@@ -160,12 +160,9 @@ impl App {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
-        let screen = match self.navigator.current() {
-            Some(screen) => screen,
-            None => return,
-        };
-
-        screen.draw(frame);
+        if let Some(screen) = self.navigator.current() {
+            screen.draw(frame);
+        }
     }
 
     async fn handle_action(&mut self, action: Action) {
