@@ -99,6 +99,7 @@ impl App {
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         let mut events = EventStream::new();
+        self.running = true;
 
         self.change_screen(ScreenId::Waiting, NavigationPolicy::Push);
 
@@ -115,7 +116,6 @@ impl App {
             let _ = abort_app_tx.send(result);
         });
 
-        self.running = true;
         while self.running {
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
 
