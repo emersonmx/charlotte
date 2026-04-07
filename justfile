@@ -2,10 +2,7 @@
     cargo build
 
 @run:
-    cargo run --bin charlotte
-
-@gencert:
-    cargo run --bin gencert
+    cargo run
 
 @watch:
     bacon
