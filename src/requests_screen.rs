@@ -104,9 +104,6 @@ impl Screen for RequestsScreen {
                     if let KeyCode::Char('q') = key_event.code {
                         return Some(Action::Exit);
                     }
-                    if let KeyCode::Char('b') = key_event.code {
-                        return Some(Action::GoBack);
-                    }
                 }
             }
             Event::ProxyMessage(message) => match message.as_ref() {
