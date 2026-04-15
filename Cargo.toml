@@ -24,3 +24,11 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+[[bin]]
+name = "charlotte"
+path = "src/main.rs"
+
+[[bin]]
+name = "gencert"
+path = "tools/gencert.rs"
