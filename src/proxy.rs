@@ -9,7 +9,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::AsyncBufReadExt,
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
 };
@@ -89,20 +89,20 @@ pub async fn serve(
                     let request_id_counter = request_id_counter.clone();
                     move |req| {
                         let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
-                        proxy_handle(req, message_channel.clone(), request_id)
+                        proxy_handle(req, message_channel.clone(), request_id, socket_addr)
                     }
                 };
 
                 tokio::spawn(async move {
                     if let Err(err) = ServerBuilder::new()
                         .preserve_header_case(true)
-                            .title_case_headers(true)
-                            .serve_connection(
-                                TokioIo::new(socket),
-                                service_fn(handler),
-                            )
-                            .with_upgrades()
-                            .await
+                        .title_case_headers(true)
+                        .serve_connection(
+                            TokioIo::new(socket),
+                            service_fn(handler),
+                        )
+                        .with_upgrades()
+                        .await
                     {
                         let _ = message_channel
                             .send(Message::ErrorOccurred((None, err.into())))
@@ -127,10 +127,11 @@ async fn proxy_handle(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
+    client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
     match req.method() {
-        &Method::CONNECT => handle_connect(req, message_channel, request_id).await,
-        _ => handle_regular(req, message_channel, request_id).await,
+        &Method::CONNECT => handle_connect(req, message_channel, request_id, client_addr).await,
+        _ => handle_regular(req, message_channel, request_id, client_addr).await,
     }
 }
 
@@ -138,16 +139,23 @@ async fn handle_connect(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
+    client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
     if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
         tokio::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) =
-                        tunnel(upgraded, &addr, message_channel.clone(), request_id).await
+                    if let Err(e) = tunnel(
+                        upgraded,
+                        &addr,
+                        message_channel.clone(),
+                        request_id,
+                        client_addr,
+                    )
+                    .await
                     {
                         let _ = message_channel
-                            .send(Message::ErrorOccurred((Some(request_id), e.into())))
+                            .send(Message::ErrorOccurred((Some(request_id), e)))
                             .await;
                     }
                 }
@@ -170,6 +178,7 @@ async fn handle_regular(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
     request_id: RequestId,
+    client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
     let (parts, body) = extract_request_parts(req).await?;
     let fetch_body = boxed_body_from_bytes(body.clone());
@@ -283,40 +292,60 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
 async fn tunnel(
     upgraded: Upgraded,
     addr: &str,
-    _message_channel: mpsc::Sender<Message>,
-    _request_id: RequestId,
+    message_channel: mpsc::Sender<Message>,
+    request_id: RequestId,
+    client_addr: std::net::SocketAddr,
 ) -> Result<(), Error> {
-    const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+    let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
+    let ca_key_bytes = std::fs::read("certs/ca.key")?;
+    let ca_cert_der = rustls::pki_types::CertificateDer::from(ca_cert_bytes);
+    let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(ca_key_bytes);
 
-    let mut server = TcpStream::connect(addr).await?;
-    let (mut server_reader, mut server_writer) = server.split();
-    let (mut client_reader, mut client_writer) = tokio::io::split(TokioIo::new(upgraded));
+    let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
+        .map_err(|e| Error::Proxy(format!("Failed to parse CA key: {e}")))?;
+    let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
+        .map_err(|e| Error::Proxy(format!("Failed to create issuer from CA cert: {e}")))?;
 
-    let client_to_server = async {
-        let mut buf = [0u8; DEFAULT_BUF_SIZE];
-        loop {
-            let n = client_reader.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            server_writer.write_all(&buf[..n]).await?;
-        }
-        server_writer.shutdown().await
+    let domain = addr.split(':').next().unwrap_or("localhost");
+    let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
+        .map_err(|e| Error::Proxy(format!("Failed to create certificate params: {e}")))?;
+    params.is_ca = rcgen::IsCa::NoCa;
+    let domain_keypair = rcgen::KeyPair::generate()
+        .map_err(|e| Error::Proxy(format!("Failed to generate key pair: {e}")))?;
+    let domain_cert = params
+        .signed_by(&domain_keypair, &issuer)
+        .map_err(|e| Error::Proxy(format!("Failed to sign certificate: {e}")))?;
+
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![domain_cert.into()], domain_keypair.into())
+        .map_err(|e| Error::Proxy(format!("Failed to create TLS config: {e}")))?;
+
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+
+    let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
+    let handler = {
+        let message_channel = message_channel.clone();
+        move |req| handle_regular(req, message_channel.clone(), request_id, client_addr)
     };
 
-    let server_to_client = async {
-        let mut buf = [0u8; DEFAULT_BUF_SIZE];
-        loop {
-            let n = server_reader.read(&mut buf).await?;
-            if n == 0 {
-                break;
-            }
-            client_writer.write_all(&buf[..n]).await?;
+    tokio::spawn(async move {
+        if let Err(err) = ServerBuilder::new()
+            .preserve_header_case(true)
+            .title_case_headers(true)
+            .serve_connection(TokioIo::new(tls_stream), service_fn(handler))
+            .with_upgrades()
+            .await
+        {
+            let _ = message_channel
+                .send(Message::ErrorOccurred((Some(request_id), err.into())))
+                .await;
         }
-        client_writer.shutdown().await
-    };
 
-    tokio::try_join!(client_to_server, server_to_client)?;
+        let _ = message_channel
+            .send(Message::ClientDisconnected(client_addr))
+            .await;
+    });
 
     Ok(())
 }

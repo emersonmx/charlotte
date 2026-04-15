@@ -12,8 +12,8 @@ http-body-util = "0.1"
 hyper = { version = "1.8.1", features = ["full"] }
 hyper-util = { version = "0.1.19", features = ["full"] }
 ratatui = "0.30"
-rcgen = "0.14"
-rustls = { version = "0.23.35", features = ["ring", "std"] }
+rcgen = { version = "0.14", features = ["x509-parser"] }
+rustls = { version = "0.23.35", features = ["aws-lc-rs", "std"] }
 thiserror = "2.0"
 tokio = { version = "1.48.0", features = ["full"] }
 tokio-rustls = "0"
