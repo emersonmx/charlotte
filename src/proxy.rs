@@ -9,6 +9,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
 };
@@ -278,13 +279,37 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
 }
 
 async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
+    const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
     let mut server = TcpStream::connect(addr).await?;
-    let mut upgraded = TokioIo::new(upgraded);
+    let (mut server_reader, mut server_writer) = server.split();
+    let (mut client_reader, mut client_writer) = tokio::io::split(TokioIo::new(upgraded));
 
-    let (from_client, from_server) =
-        tokio::io::copy_bidirectional(&mut upgraded, &mut server).await?;
+    let client_to_server = async {
+        let mut buf = [0u8; DEFAULT_BUF_SIZE];
+        loop {
+            let n = client_reader.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            server_writer.write_all(&buf[..n]).await?;
+        }
+        server_writer.shutdown().await
+    };
 
-    println!("Client wrote {from_client} bytes and received {from_server} bytes");
+    let server_to_client = async {
+        let mut buf = [0u8; DEFAULT_BUF_SIZE];
+        loop {
+            let n = server_reader.read(&mut buf).await?;
+            if n == 0 {
+                break;
+            }
+            client_writer.write_all(&buf[..n]).await?;
+        }
+        client_writer.shutdown().await
+    };
+
+    tokio::try_join!(client_to_server, server_to_client)?;
 
     Ok(())
 }
