@@ -143,7 +143,9 @@ async fn handle_connect(
         tokio::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) = tunnel(upgraded, &addr).await {
+                    if let Err(e) =
+                        tunnel(upgraded, &addr, message_channel.clone(), request_id).await
+                    {
                         let _ = message_channel
                             .send(Message::ErrorOccurred((Some(request_id), e.into())))
                             .await;
@@ -278,7 +280,12 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     }
 }
 
-async fn tunnel(upgraded: Upgraded, addr: &str) -> std::io::Result<()> {
+async fn tunnel(
+    upgraded: Upgraded,
+    addr: &str,
+    _message_channel: mpsc::Sender<Message>,
+    _request_id: RequestId,
+) -> Result<(), Error> {
     const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
     let mut server = TcpStream::connect(addr).await?;
