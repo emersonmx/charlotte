@@ -344,7 +344,7 @@ async fn handle_upgraded(
     request_id_counter: Arc<AtomicUsize>,
     client_addr: std::net::SocketAddr,
 ) -> Result<(), Error> {
-    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
+    let request_id = request_id_counter.load(Ordering::Relaxed);
 
     let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
     let ca_key_bytes = std::fs::read("certs/ca.key")?;
