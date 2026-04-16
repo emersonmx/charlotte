@@ -184,7 +184,7 @@ async fn proxy_handle(
         &Method::CONNECT => {
             handle_connect(req, message_channel, request_id_counter, client_addr).await
         }
-        _ => handle_regular(req, message_channel, request_id_counter, client_addr).await,
+        _ => handle_regular(req, message_channel, request_id_counter, client_addr, false).await,
     }
 }
 
@@ -256,10 +256,12 @@ async fn handle_regular(
     message_channel: mpsc::Sender<Message>,
     request_id_counter: Arc<AtomicUsize>,
     _client_addr: std::net::SocketAddr,
+    is_tls: bool,
 ) -> Result<HyperResponse, Error> {
     let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-    let (parts, body) = extract_request_parts(req).await?;
+    let (mut parts, body) = extract_request_parts(req).await?;
+    fix_relative_uri(&mut parts, is_tls)?;
     let fetch_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
 
@@ -380,6 +382,7 @@ async fn handle_upgraded(
                 message_channel.clone(),
                 request_id_counter.clone(),
                 client_addr,
+                true,
             )
         }
     };
@@ -484,4 +487,19 @@ where
 fn clean_response_headers(headers: &mut HeaderMap) {
     headers.remove(hyper::header::CONNECTION);
     headers.remove(hyper::header::TRANSFER_ENCODING);
+}
+
+fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Result<(), Error> {
+    if parts.uri.scheme().is_none()
+        && let Some(host) = parts.headers.get(hyper::header::HOST)
+    {
+        let host = host
+            .to_str()
+            .map_err(|_| Error::Proxy("Host inválido".to_string()))?;
+        let scheme = if is_tls { "https" } else { "http" };
+        let new_uri = format!("{}://{}{}", scheme, host, parts.uri);
+        let uri = new_uri.parse::<Uri>()?;
+        parts.uri = uri;
+    }
+    Ok(())
 }
