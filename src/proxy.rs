@@ -9,7 +9,6 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
-    io::AsyncBufReadExt,
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
 };
@@ -141,8 +140,7 @@ pub async fn serve(
                     let message_channel = message_channel.clone();
                     let request_id_counter = request_id_counter.clone();
                     move |req| {
-                        let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
-                        proxy_handle(req, message_channel.clone(), request_id, socket_addr)
+                        proxy_handle(req, message_channel.clone(), request_id_counter.clone(), socket_addr)
                     }
                 };
 
@@ -179,42 +177,30 @@ pub async fn serve(
 async fn proxy_handle(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
-    request_id: RequestId,
+    request_id_counter: Arc<AtomicUsize>,
     client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
     match req.method() {
-        &Method::CONNECT => handle_connect(req, message_channel, request_id, client_addr).await,
-        _ => handle_regular(req, message_channel, request_id, client_addr).await,
+        &Method::CONNECT => {
+            handle_connect(req, message_channel, request_id_counter, client_addr).await
+        }
+        _ => handle_regular(req, message_channel, request_id_counter, client_addr).await,
     }
 }
 
 async fn handle_connect(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
-    request_id: RequestId,
+    request_id_counter: Arc<AtomicUsize>,
     client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
+    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
+
     let (parts, body) = extract_request_parts(req).await?;
     let req_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
-    let request = Request {
-        method: parts.method.to_string(),
-        url: parts.uri.to_string(),
-        headers: parts
-            .headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.as_str().to_string(),
-                    v.to_str()
-                        .unwrap_or("<invalid UTF-8 in header value>")
-                        .to_string(),
-                )
-            })
-            .collect(),
-        body: channel_body.collect().await?.to_bytes().to_vec(),
-    };
 
+    let request = Request::from_parts(&parts, channel_body).await?;
     let _ = message_channel
         .send(Message::RequestSent((request_id, request)))
         .await;
@@ -222,14 +208,15 @@ async fn handle_connect(
     let req = HyperRequest::from_parts(parts, req_body);
 
     if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
+        let message_channel = message_channel.clone();
         tokio::spawn(async move {
             match hyper::upgrade::on(req).await {
                 Ok(upgraded) => {
-                    if let Err(e) = tunnel(
+                    if let Err(e) = handle_upgraded(
                         upgraded,
                         &addr,
                         message_channel.clone(),
-                        request_id,
+                        request_id_counter,
                         client_addr,
                     )
                     .await
@@ -251,15 +238,28 @@ async fn handle_connect(
     let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
     let mut res = HyperResponse::new(empty);
     *res.status_mut() = hyper::StatusCode::OK;
+
+    let (parts, body) = res.into_parts();
+    let body = body.collect().await?.to_bytes();
+    let res_body = boxed_body_from_bytes(body.clone());
+    let channel_body = boxed_body_from_bytes(body);
+    let response = Response::from_parts(&parts, channel_body).await?;
+    let _ = message_channel
+        .send(Message::ResponseReceived((request_id, response)))
+        .await;
+
+    let res = HyperResponse::from_parts(parts, res_body);
     Ok(res)
 }
 
 async fn handle_regular(
     req: IncomingRequest,
     message_channel: mpsc::Sender<Message>,
-    request_id: RequestId,
-    client_addr: std::net::SocketAddr,
+    request_id_counter: Arc<AtomicUsize>,
+    _client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
+    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
+
     let (parts, body) = extract_request_parts(req).await?;
     let fetch_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
@@ -336,13 +336,15 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     }
 }
 
-async fn tunnel(
+async fn handle_upgraded(
     upgraded: Upgraded,
     addr: &str,
     message_channel: mpsc::Sender<Message>,
-    request_id: RequestId,
+    request_id_counter: Arc<AtomicUsize>,
     client_addr: std::net::SocketAddr,
 ) -> Result<(), Error> {
+    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
+
     let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
     let ca_key_bytes = std::fs::read("certs/ca.key")?;
     let ca_cert_der = rustls::pki_types::CertificateDer::from(ca_cert_bytes);
@@ -373,7 +375,14 @@ async fn tunnel(
     let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
     let handler = {
         let message_channel = message_channel.clone();
-        move |req| handle_regular(req, message_channel.clone(), request_id, client_addr)
+        move |req| {
+            handle_regular(
+                req,
+                message_channel.clone(),
+                request_id_counter.clone(),
+                client_addr,
+            )
+        }
     };
 
     tokio::spawn(async move {
