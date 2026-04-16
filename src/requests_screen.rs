@@ -100,11 +100,10 @@ impl Screen for RequestsScreen {
     async fn handle_event(&mut self, event: &Event) -> Option<Action> {
         match event {
             Event::CrosstermEvent(event) => {
-                if let crossterm::event::Event::Key(key_event) = event {
-                    if let KeyCode::Char('q') = key_event.code {
+                if let crossterm::event::Event::Key(key_event) = event
+                    && let KeyCode::Char('q') = key_event.code {
                         return Some(Action::Exit);
                     }
-                }
             }
             Event::ProxyMessage(message) => match message.as_ref() {
                 proxy::Message::RequestSent((request_id, request)) => {
