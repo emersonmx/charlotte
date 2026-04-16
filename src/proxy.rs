@@ -45,11 +45,64 @@ pub struct Request {
     pub body: Vec<u8>,
 }
 
+impl Request {
+    pub async fn from_parts(
+        parts: &hyper::http::request::Parts,
+        body: BoxBody<Bytes, Error>,
+    ) -> Result<Self, Error> {
+        let body = body.collect().await?.to_bytes().to_vec();
+
+        Ok(Self {
+            method: parts.method.to_string(),
+            url: parts.uri.to_string(),
+            headers: parts
+                .headers
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.as_str().to_string(),
+                        v.to_str()
+                            .unwrap_or("<invalid UTF-8 in header value>")
+                            .to_string(),
+                    )
+                })
+                .collect(),
+            body,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+}
+
+impl Response {
+    pub async fn from_parts(
+        parts: &hyper::http::response::Parts,
+        body: BoxBody<Bytes, Error>,
+    ) -> Result<Self, Error> {
+        let body = body.collect().await?.to_bytes().to_vec();
+
+        Ok(Self {
+            status: parts.status.as_u16(),
+            headers: parts
+                .headers
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.as_str().to_string(),
+                        v.to_str()
+                            .unwrap_or("<invalid UTF-8 in header value>")
+                            .to_string(),
+                    )
+                })
+                .collect(),
+            body,
+        })
+    }
 }
 
 #[allow(dead_code)]
@@ -141,6 +194,33 @@ async fn handle_connect(
     request_id: RequestId,
     client_addr: std::net::SocketAddr,
 ) -> Result<HyperResponse, Error> {
+    let (parts, body) = extract_request_parts(req).await?;
+    let req_body = boxed_body_from_bytes(body.clone());
+    let channel_body = boxed_body_from_bytes(body);
+    let request = Request {
+        method: parts.method.to_string(),
+        url: parts.uri.to_string(),
+        headers: parts
+            .headers
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.as_str().to_string(),
+                    v.to_str()
+                        .unwrap_or("<invalid UTF-8 in header value>")
+                        .to_string(),
+                )
+            })
+            .collect(),
+        body: channel_body.collect().await?.to_bytes().to_vec(),
+    };
+
+    let _ = message_channel
+        .send(Message::RequestSent((request_id, request)))
+        .await;
+
+    let req = HyperRequest::from_parts(parts, req_body);
+
     if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
         tokio::spawn(async move {
             match hyper::upgrade::on(req).await {
@@ -184,24 +264,7 @@ async fn handle_regular(
     let fetch_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
 
-    let request = Request {
-        method: parts.method.to_string(),
-        url: parts.uri.to_string(),
-        headers: parts
-            .headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.as_str().to_string(),
-                    v.to_str()
-                        .unwrap_or("<invalid UTF-8 in header value>")
-                        .to_string(),
-                )
-            })
-            .collect(),
-        body: channel_body.collect().await?.to_bytes().to_vec(),
-    };
-
+    let request = Request::from_parts(&parts, channel_body).await?;
     let _ = message_channel
         .send(Message::RequestSent((request_id, request)))
         .await;
@@ -212,23 +275,7 @@ async fn handle_regular(
     let client_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
 
-    let response = Response {
-        status: parts.status.as_u16(),
-        headers: parts
-            .headers
-            .iter()
-            .map(|(k, v)| {
-                (
-                    k.as_str().to_string(),
-                    v.to_str()
-                        .unwrap_or("<invalid UTF-8 in header value>")
-                        .to_string(),
-                )
-            })
-            .collect(),
-        body: channel_body.collect().await?.to_bytes().to_vec(),
-    };
-
+    let response = Response::from_parts(&parts, channel_body).await?;
     let _ = message_channel
         .send(Message::ResponseReceived((request_id, response)))
         .await;
