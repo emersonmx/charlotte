@@ -239,8 +239,7 @@ async fn handle_connect(
     let mut res = HyperResponse::new(empty);
     *res.status_mut() = hyper::StatusCode::OK;
 
-    let (parts, body) = res.into_parts();
-    let body = body.collect().await?.to_bytes();
+    let (parts, body) = extract_response_parts(res).await?;
     let res_body = boxed_body_from_bytes(body.clone());
     let channel_body = boxed_body_from_bytes(body);
     let response = Response::from_parts(&parts, channel_body).await?;
@@ -406,12 +405,20 @@ async fn handle_upgraded(
     Ok(())
 }
 
-async fn extract_request_parts(
-    req: IncomingRequest,
-) -> Result<(hyper::http::request::Parts, Bytes), Error> {
+async fn extract_request_parts<B>(
+    req: hyper::Request<B>,
+) -> Result<(hyper::http::request::Parts, Bytes), Error>
+where
+    B: hyper::body::Body,
+    B::Error: std::fmt::Debug,
+{
     let (mut parts, body) = req.into_parts();
     clean_request_headers(&mut parts.headers);
-    let body = body.collect().await?.to_bytes();
+    let body = body
+        .collect()
+        .await
+        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
+        .to_bytes();
     Ok((parts, body))
 }
 
@@ -457,12 +464,20 @@ async fn fetch(req: HyperRequest) -> Result<IncomingResponse, Error> {
     Ok(res)
 }
 
-async fn extract_response_parts(
-    res: IncomingResponse,
-) -> Result<(hyper::http::response::Parts, Bytes), Error> {
+async fn extract_response_parts<B>(
+    res: hyper::Response<B>,
+) -> Result<(hyper::http::response::Parts, Bytes), Error>
+where
+    B: hyper::body::Body,
+    B::Error: std::fmt::Debug,
+{
     let (mut parts, body) = res.into_parts();
     clean_response_headers(&mut parts.headers);
-    let body = body.collect().await?.to_bytes();
+    let body = body
+        .collect()
+        .await
+        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
+        .to_bytes();
     Ok((parts, body))
 }
 
