@@ -116,172 +116,248 @@ pub enum Message {
     ErrorOccurred((Option<RequestId>, Error)),
 }
 
-pub async fn serve(
-    server_addr: std::net::SocketAddr,
+pub struct Server {
+    addr: std::net::SocketAddr,
     message_channel: mpsc::Sender<Message>,
-    mut abort_channel: oneshot::Receiver<()>,
-) -> Result<(), Error> {
-    let listener = TcpListener::bind(server_addr).await?;
+    request_id_counter: Arc<AtomicUsize>,
+}
 
-    let _ = message_channel.send(Message::ServerStarted).await;
+impl Server {
+    pub fn new(addr: std::net::SocketAddr, message_channel: mpsc::Sender<Message>) -> Arc<Self> {
+        let request_id_counter = Arc::new(AtomicUsize::new(1));
+        Arc::new(Self {
+            addr,
+            message_channel,
+            request_id_counter,
+        })
+    }
 
-    let request_id_counter = Arc::new(AtomicUsize::new(1));
-    loop {
-        tokio::select! {
-            accept_result = listener.accept() => {
-                let (socket, socket_addr) = accept_result?;
+    pub async fn run(
+        self: Arc<Self>,
+        mut abort_channel: oneshot::Receiver<()>,
+    ) -> Result<(), Error> {
+        let listener = TcpListener::bind(self.addr).await?;
 
-                let message_channel = message_channel.clone();
-                let _ = message_channel
-                    .send(Message::ClientConnected(socket_addr))
-                    .await;
+        let _ = self.message_channel.send(Message::ServerStarted).await;
 
-                let handler = {
-                    let message_channel = message_channel.clone();
-                    let request_id_counter = request_id_counter.clone();
-                    move |req| {
-                        proxy_handle(req, message_channel.clone(), request_id_counter.clone(), socket_addr)
-                    }
-                };
+        loop {
+            tokio::select! {
+                accept_result = listener.accept() => {
+                    let (socket, socket_addr) = accept_result?;
 
-                tokio::spawn(async move {
-                    if let Err(err) = ServerBuilder::new()
-                        .preserve_header_case(true)
-                        .title_case_headers(true)
-                        .serve_connection(
-                            TokioIo::new(socket),
-                            service_fn(handler),
-                        )
-                        .with_upgrades()
-                        .await
-                    {
+                    let message_channel = self.message_channel.clone();
+                    let _ = message_channel
+                        .send(Message::ClientConnected(socket_addr))
+                        .await;
+
+                    let server = self.clone();
+                    let handler = {
+                        move |req| {
+                            Server::proxy_handle(server.clone(), req, socket_addr)
+                        }
+                    };
+
+                    tokio::spawn(async move {
+                        if let Err(err) = ServerBuilder::new()
+                            .preserve_header_case(true)
+                            .title_case_headers(true)
+                            .serve_connection(
+                                TokioIo::new(socket),
+                                service_fn(handler),
+                            )
+                            .with_upgrades()
+                            .await
+                        {
+                            let _ = message_channel
+                                .send(Message::ErrorOccurred((None, err.into())))
+                                .await;
+                        }
+
                         let _ = message_channel
-                            .send(Message::ErrorOccurred((None, err.into())))
+                            .send(Message::ClientDisconnected(socket_addr))
+                            .await;
+                        });
+                }
+                _ = &mut abort_channel => break
+            }
+        }
+
+        let _ = self.message_channel.send(Message::ServerStopped).await;
+
+        Ok(())
+    }
+
+    async fn proxy_handle(
+        self: Arc<Self>,
+        req: IncomingRequest,
+        client_addr: std::net::SocketAddr,
+    ) -> Result<HyperResponse, Error> {
+        match req.method() {
+            &Method::CONNECT => self.handle_connect(req, client_addr).await,
+            _ => self.handle_regular(req, client_addr, false).await,
+        }
+    }
+
+    async fn handle_connect(
+        self: Arc<Self>,
+        req: IncomingRequest,
+        client_addr: std::net::SocketAddr,
+    ) -> Result<HyperResponse, Error> {
+        let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
+
+        let (parts, body) = extract_request_parts(req).await?;
+        let req_body = boxed_body_from_bytes(body.clone());
+        let channel_body = boxed_body_from_bytes(body);
+
+        let request = Request::from_parts(&parts, channel_body).await?;
+        let _ = self
+            .message_channel
+            .send(Message::RequestSent((request_id, request)))
+            .await;
+
+        let req = HyperRequest::from_parts(parts, req_body);
+
+        if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
+            let self_arc = self.clone();
+            let message_channel = self.message_channel.clone();
+            tokio::spawn(async move {
+                match hyper::upgrade::on(req).await {
+                    Ok(upgraded) => {
+                        if let Err(e) = self_arc.handle_upgraded(upgraded, &addr, client_addr).await
+                        {
+                            let _ = message_channel
+                                .send(Message::ErrorOccurred((Some(request_id), e)))
+                                .await;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = message_channel
+                            .send(Message::ErrorOccurred((Some(request_id), e.into())))
                             .await;
                     }
+                }
+            });
+        }
 
-                    let _ = message_channel
-                        .send(Message::ClientDisconnected(socket_addr))
-                        .await;
-                    });
+        let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
+        let mut res = HyperResponse::new(empty);
+        *res.status_mut() = hyper::StatusCode::OK;
+
+        let (parts, body) = extract_response_parts(res).await?;
+        let res_body = boxed_body_from_bytes(body.clone());
+        let channel_body = boxed_body_from_bytes(body);
+        let response = Response::from_parts(&parts, channel_body).await?;
+        let _ = self
+            .message_channel
+            .send(Message::ResponseReceived((request_id, response)))
+            .await;
+
+        let res = HyperResponse::from_parts(parts, res_body);
+        Ok(res)
+    }
+
+    async fn handle_upgraded(
+        self: Arc<Self>,
+        upgraded: Upgraded,
+        addr: &str,
+        client_addr: std::net::SocketAddr,
+    ) -> Result<(), Error> {
+        let request_id = self.request_id_counter.load(Ordering::Relaxed);
+
+        let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
+        let ca_key_bytes = std::fs::read("certs/ca.key")?;
+        let ca_cert_der = rustls::pki_types::CertificateDer::from(ca_cert_bytes);
+        let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(ca_key_bytes);
+
+        let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
+            .map_err(|e| Error::Proxy(format!("Failed to parse CA key: {e}")))?;
+        let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
+            .map_err(|e| Error::Proxy(format!("Failed to create issuer from CA cert: {e}")))?;
+
+        let domain = addr.split(':').next().unwrap_or("localhost");
+        let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
+            .map_err(|e| Error::Proxy(format!("Failed to create certificate params: {e}")))?;
+        params.is_ca = rcgen::IsCa::NoCa;
+        let domain_keypair = rcgen::KeyPair::generate()
+            .map_err(|e| Error::Proxy(format!("Failed to generate key pair: {e}")))?;
+        let domain_cert = params
+            .signed_by(&domain_keypair, &issuer)
+            .map_err(|e| Error::Proxy(format!("Failed to sign certificate: {e}")))?;
+
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![domain_cert.into()], domain_keypair.into())
+            .map_err(|e| Error::Proxy(format!("Failed to create TLS config: {e}")))?;
+
+        let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+
+        let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
+
+        let self_arc = self.clone();
+        let handler = {
+            let self_arc = self_arc.clone();
+            move |req| {
+                let self_arc = self_arc.clone();
+                self_arc.handle_regular(req, client_addr, true)
             }
-            _ = &mut abort_channel => break
-        }
-    }
+        };
 
-    let _ = message_channel.send(Message::ServerStopped).await;
-
-    Ok(())
-}
-
-async fn proxy_handle(
-    req: IncomingRequest,
-    message_channel: mpsc::Sender<Message>,
-    request_id_counter: Arc<AtomicUsize>,
-    client_addr: std::net::SocketAddr,
-) -> Result<HyperResponse, Error> {
-    match req.method() {
-        &Method::CONNECT => {
-            handle_connect(req, message_channel, request_id_counter, client_addr).await
-        }
-        _ => handle_regular(req, message_channel, request_id_counter, client_addr, false).await,
-    }
-}
-
-async fn handle_connect(
-    req: IncomingRequest,
-    message_channel: mpsc::Sender<Message>,
-    request_id_counter: Arc<AtomicUsize>,
-    client_addr: std::net::SocketAddr,
-) -> Result<HyperResponse, Error> {
-    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
-
-    let (parts, body) = extract_request_parts(req).await?;
-    let req_body = boxed_body_from_bytes(body.clone());
-    let channel_body = boxed_body_from_bytes(body);
-
-    let request = Request::from_parts(&parts, channel_body).await?;
-    let _ = message_channel
-        .send(Message::RequestSent((request_id, request)))
-        .await;
-
-    let req = HyperRequest::from_parts(parts, req_body);
-
-    if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
-        let message_channel = message_channel.clone();
         tokio::spawn(async move {
-            match hyper::upgrade::on(req).await {
-                Ok(upgraded) => {
-                    if let Err(e) = handle_upgraded(
-                        upgraded,
-                        &addr,
-                        message_channel.clone(),
-                        request_id_counter,
-                        client_addr,
-                    )
-                    .await
-                    {
-                        let _ = message_channel
-                            .send(Message::ErrorOccurred((Some(request_id), e)))
-                            .await;
-                    }
-                }
-                Err(e) => {
-                    let _ = message_channel
-                        .send(Message::ErrorOccurred((Some(request_id), e.into())))
-                        .await;
-                }
+            if let Err(err) = ServerBuilder::new()
+                .preserve_header_case(true)
+                .title_case_headers(true)
+                .serve_connection(TokioIo::new(tls_stream), service_fn(handler))
+                .with_upgrades()
+                .await
+            {
+                let _ = self
+                    .message_channel
+                    .send(Message::ErrorOccurred((Some(request_id), err.into())))
+                    .await;
             }
+
+            let _ = self
+                .message_channel
+                .send(Message::ClientDisconnected(client_addr))
+                .await;
         });
+
+        Ok(())
     }
 
-    let empty = Empty::<Bytes>::new().map_err(|e| match e {}).boxed();
-    let mut res = HyperResponse::new(empty);
-    *res.status_mut() = hyper::StatusCode::OK;
+    async fn handle_regular(
+        self: Arc<Self>,
+        req: IncomingRequest,
+        _client_addr: std::net::SocketAddr,
+        is_tls: bool,
+    ) -> Result<HyperResponse, Error> {
+        let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-    let (parts, body) = extract_response_parts(res).await?;
-    let res_body = boxed_body_from_bytes(body.clone());
-    let channel_body = boxed_body_from_bytes(body);
-    let response = Response::from_parts(&parts, channel_body).await?;
-    let _ = message_channel
-        .send(Message::ResponseReceived((request_id, response)))
-        .await;
+        let (mut parts, body) = extract_request_parts(req).await?;
+        fix_relative_uri(&mut parts, is_tls)?;
+        let fetch_body = boxed_body_from_bytes(body.clone());
+        let channel_body = boxed_body_from_bytes(body);
 
-    let res = HyperResponse::from_parts(parts, res_body);
-    Ok(res)
-}
+        let request = Request::from_parts(&parts, channel_body).await?;
+        let _ = self
+            .message_channel
+            .send(Message::RequestSent((request_id, request)))
+            .await;
 
-async fn handle_regular(
-    req: IncomingRequest,
-    message_channel: mpsc::Sender<Message>,
-    request_id_counter: Arc<AtomicUsize>,
-    _client_addr: std::net::SocketAddr,
-    is_tls: bool,
-) -> Result<HyperResponse, Error> {
-    let request_id = request_id_counter.fetch_add(1, Ordering::Relaxed);
+        let res = fetch(HyperRequest::from_parts(parts, fetch_body)).await?;
 
-    let (mut parts, body) = extract_request_parts(req).await?;
-    fix_relative_uri(&mut parts, is_tls)?;
-    let fetch_body = boxed_body_from_bytes(body.clone());
-    let channel_body = boxed_body_from_bytes(body);
+        let (parts, body) = extract_response_parts(res).await?;
+        let client_body = boxed_body_from_bytes(body.clone());
+        let channel_body = boxed_body_from_bytes(body);
 
-    let request = Request::from_parts(&parts, channel_body).await?;
-    let _ = message_channel
-        .send(Message::RequestSent((request_id, request)))
-        .await;
+        let response = Response::from_parts(&parts, channel_body).await?;
+        let _ = self
+            .message_channel
+            .send(Message::ResponseReceived((request_id, response)))
+            .await;
 
-    let res = fetch(HyperRequest::from_parts(parts, fetch_body)).await?;
-
-    let (parts, body) = extract_response_parts(res).await?;
-    let client_body = boxed_body_from_bytes(body.clone());
-    let channel_body = boxed_body_from_bytes(body);
-
-    let response = Response::from_parts(&parts, channel_body).await?;
-    let _ = message_channel
-        .send(Message::ResponseReceived((request_id, response)))
-        .await;
-
-    Ok(HyperResponse::from_parts(parts, client_body))
+        Ok(HyperResponse::from_parts(parts, client_body))
+    }
 }
 
 fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
@@ -335,77 +411,6 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
             "Missing port information in URI or Host header".to_string(),
         ))
     }
-}
-
-async fn handle_upgraded(
-    upgraded: Upgraded,
-    addr: &str,
-    message_channel: mpsc::Sender<Message>,
-    request_id_counter: Arc<AtomicUsize>,
-    client_addr: std::net::SocketAddr,
-) -> Result<(), Error> {
-    let request_id = request_id_counter.load(Ordering::Relaxed);
-
-    let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
-    let ca_key_bytes = std::fs::read("certs/ca.key")?;
-    let ca_cert_der = rustls::pki_types::CertificateDer::from(ca_cert_bytes);
-    let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(ca_key_bytes);
-
-    let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
-        .map_err(|e| Error::Proxy(format!("Failed to parse CA key: {e}")))?;
-    let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
-        .map_err(|e| Error::Proxy(format!("Failed to create issuer from CA cert: {e}")))?;
-
-    let domain = addr.split(':').next().unwrap_or("localhost");
-    let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
-        .map_err(|e| Error::Proxy(format!("Failed to create certificate params: {e}")))?;
-    params.is_ca = rcgen::IsCa::NoCa;
-    let domain_keypair = rcgen::KeyPair::generate()
-        .map_err(|e| Error::Proxy(format!("Failed to generate key pair: {e}")))?;
-    let domain_cert = params
-        .signed_by(&domain_keypair, &issuer)
-        .map_err(|e| Error::Proxy(format!("Failed to sign certificate: {e}")))?;
-
-    let config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![domain_cert.into()], domain_keypair.into())
-        .map_err(|e| Error::Proxy(format!("Failed to create TLS config: {e}")))?;
-
-    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
-
-    let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
-    let handler = {
-        let message_channel = message_channel.clone();
-        move |req| {
-            handle_regular(
-                req,
-                message_channel.clone(),
-                request_id_counter.clone(),
-                client_addr,
-                true,
-            )
-        }
-    };
-
-    tokio::spawn(async move {
-        if let Err(err) = ServerBuilder::new()
-            .preserve_header_case(true)
-            .title_case_headers(true)
-            .serve_connection(TokioIo::new(tls_stream), service_fn(handler))
-            .with_upgrades()
-            .await
-        {
-            let _ = message_channel
-                .send(Message::ErrorOccurred((Some(request_id), err.into())))
-                .await;
-        }
-
-        let _ = message_channel
-            .send(Message::ClientDisconnected(client_addr))
-            .await;
-    });
-
-    Ok(())
 }
 
 async fn extract_request_parts<B>(

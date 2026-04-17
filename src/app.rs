@@ -111,8 +111,9 @@ impl App {
 
         self.abort_server_tx = Some(abort_server_tx);
 
+        let server = proxy::Server::new(server_addr, message_tx.clone());
         let server_handle = tokio::spawn(async move {
-            let result = proxy::serve(server_addr, message_tx, abort_server_rx).await;
+            let result = server.run(abort_server_rx).await;
             let _ = abort_app_tx.send(result);
         });
 
