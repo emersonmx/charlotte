@@ -14,11 +14,9 @@ use tokio::{
 };
 
 type ClientBuilder = hyper::client::conn::http1::Builder;
+type ServerBuilder = hyper::server::conn::http1::Builder;
 type IncomingRequest = hyper::Request<hyper::body::Incoming>;
 type IncomingResponse = hyper::Response<hyper::body::Incoming>;
-type ServerBuilder = hyper::server::conn::http1::Builder;
-
-pub type RequestId = usize;
 type HyperRequest = hyper::Request<BoxBody<Bytes, Error>>;
 type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
@@ -35,6 +33,8 @@ pub enum Error {
     #[error("{0}")]
     Proxy(String),
 }
+
+pub type RequestId = usize;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
@@ -439,6 +439,28 @@ fn clean_request_headers(headers: &mut HeaderMap) {
     headers.remove(hyper::header::TRANSFER_ENCODING);
 }
 
+async fn extract_response_parts<B>(
+    res: hyper::Response<B>,
+) -> Result<(hyper::http::response::Parts, Bytes), Error>
+where
+    B: hyper::body::Body,
+    B::Error: std::fmt::Debug,
+{
+    let (mut parts, body) = res.into_parts();
+    clean_response_headers(&mut parts.headers);
+    let body = body
+        .collect()
+        .await
+        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
+        .to_bytes();
+    Ok((parts, body))
+}
+
+fn clean_response_headers(headers: &mut HeaderMap) {
+    headers.remove(hyper::header::CONNECTION);
+    headers.remove(hyper::header::TRANSFER_ENCODING);
+}
+
 fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
     Full::new(body).map_err(|e| match e {}).boxed()
 }
@@ -472,28 +494,6 @@ async fn fetch(req: HyperRequest) -> Result<IncomingResponse, Error> {
     let res = sender.send_request(req).await?;
 
     Ok(res)
-}
-
-async fn extract_response_parts<B>(
-    res: hyper::Response<B>,
-) -> Result<(hyper::http::response::Parts, Bytes), Error>
-where
-    B: hyper::body::Body,
-    B::Error: std::fmt::Debug,
-{
-    let (mut parts, body) = res.into_parts();
-    clean_response_headers(&mut parts.headers);
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
-        .to_bytes();
-    Ok((parts, body))
-}
-
-fn clean_response_headers(headers: &mut HeaderMap) {
-    headers.remove(hyper::header::CONNECTION);
-    headers.remove(hyper::header::TRANSFER_ENCODING);
 }
 
 fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Result<(), Error> {
