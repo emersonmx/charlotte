@@ -32,6 +32,12 @@ pub enum Error {
     InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
+    #[error("{message} (uri: {uri}, headers: {headers:?})")]
+    PortResolutionFailed {
+        message: String,
+        uri: String,
+        headers: Vec<(String, String)>,
+    },
     #[error("Failed to listen on address: {addr}, error: {source}")]
     BindFailed {
         addr: std::net::SocketAddr,
@@ -404,9 +410,11 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
         let port = uri.port_u16().unwrap_or(default_port);
         Ok(port.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host
-            .to_str()
-            .map_err(|_| Error::Proxy("Invalid HOST header format (not UTF-8)".to_string()))?;
+        let host_str = host.to_str().map_err(|_| Error::PortResolutionFailed {
+            message: "Invalid HOST header format (not UTF-8)".to_string(),
+            uri: uri.to_string(),
+            headers: headers_to_vec(headers),
+        })?;
 
         match host_str.rsplit_once(':') {
             Some((_, port_str)) => {
@@ -416,9 +424,11 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
             None => Ok(default_port.to_string()),
         }
     } else {
-        Err(Error::Proxy(
-            "Missing port information in URI or Host header".to_string(),
-        ))
+        Err(Error::PortResolutionFailed {
+            message: "Missing port information in URI or Host header".to_string(),
+            uri: uri.to_string(),
+            headers: headers_to_vec(headers),
+        })
     }
 }
 
