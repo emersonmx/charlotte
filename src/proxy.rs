@@ -45,7 +45,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub async fn from_parts(
+    async fn from_parts(
         parts: &hyper::http::request::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
@@ -68,7 +68,7 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn from_parts(
+    async fn from_parts(
         parts: &hyper::http::response::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
