@@ -32,6 +32,7 @@ pub enum Error {
     InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
+
     #[error("{message} (uri: {uri}, headers: {headers:?})")]
     AddressResolutionFailed {
         message: String,
@@ -46,19 +47,21 @@ pub enum Error {
     },
     #[error("Failed to accept connection: {0}")]
     AcceptFailed(#[source] std::io::Error),
-    #[error(
-        "Failed to read request body: {message} (method: {method}, url: {url}, headers: {headers:?})"
-    )]
+    #[error("Failed to read request body: {message} (method: {method}, uri: {uri})")]
     RequestBodyReadFailed {
         method: String,
-        url: String,
+        uri: String,
+        version: String,
         headers: Vec<(String, String)>,
+        extensions: String,
         message: String,
     },
-    #[error("Failed to read response body: {message} (status: {status}, headers: {headers:?})")]
+    #[error("Failed to read response body: {message} (status: {status})")]
     ResponseBodyReadFailed {
         status: u16,
+        version: String,
         headers: Vec<(String, String)>,
+        extensions: String,
         message: String,
     },
 }
@@ -487,8 +490,10 @@ where
         .await
         .map_err(|e| Error::RequestBodyReadFailed {
             method: parts.method.to_string(),
-            url: parts.uri.to_string(),
+            uri: parts.uri.to_string(),
+            version: format!("{:?}", parts.version),
             headers: headers_to_vec(&parts.headers),
+            extensions: format!("{:?}", parts.extensions),
             message: format!("{e:?}"),
         })?
         .to_bytes();
@@ -516,7 +521,9 @@ where
         .await
         .map_err(|e| Error::ResponseBodyReadFailed {
             status: parts.status.as_u16(),
+            version: format!("{:?}", parts.version),
             headers: headers_to_vec(&parts.headers),
+            extensions: format!("{:?}", parts.extensions),
             message: format!("{e:?}"),
         })?
         .to_bytes();
