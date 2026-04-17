@@ -150,10 +150,10 @@ impl Server {
                         .await;
 
                     let handler = {
-                        let server = self.clone();
+                        let self_clone = self.clone();
                         move |req| {
-                            let server = server.clone();
-                            server.proxy_handle(req, socket_addr)
+                            let self_clone = self_clone.clone();
+                            self_clone.proxy_handle(req, socket_addr)
                         }
                     };
 
@@ -219,12 +219,14 @@ impl Server {
         let req = HyperRequest::from_parts(parts, req_body);
 
         if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
-            let self_arc = self.clone();
-            let message_channel = self_arc.message_channel.clone();
+            let self_clone = self.clone();
+            let message_channel = self_clone.message_channel.clone();
             tokio::spawn(async move {
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
-                        if let Err(e) = self_arc.handle_upgraded(upgraded, &addr, client_addr).await
+                        if let Err(e) = self_clone
+                            .handle_upgraded(upgraded, &addr, client_addr)
+                            .await
                         {
                             let _ = message_channel
                                 .send(Message::ErrorOccurred((Some(request_id), e)))
@@ -295,10 +297,10 @@ impl Server {
         let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
 
         let handler = {
-            let self_arc = self.clone();
+            let self_clone = self.clone();
             move |req| {
-                let self_arc = self_arc.clone();
-                self_arc.handle_regular(req, client_addr, true)
+                let self_clone = self_clone.clone();
+                self_clone.handle_regular(req, client_addr, true)
             }
         };
 
