@@ -34,21 +34,21 @@ pub enum Error {
     Proxy(String),
 
     #[error("{message} (uri: {uri}, headers: {headers:?})")]
-    AddressResolutionFailed {
+    TargetAddress {
         message: String,
         uri: String,
         headers: Vec<(String, String)>,
     },
     #[error("Failed to listen on address: {addr}, error: {source}")]
-    BindFailed {
+    BindAddress {
         addr: std::net::SocketAddr,
         #[source]
         source: std::io::Error,
     },
     #[error("Failed to accept connection: {0}")]
-    AcceptFailed(#[source] std::io::Error),
+    AcceptConnection(#[source] std::io::Error),
     #[error("Failed to read request body: {message} (method: {method}, uri: {uri})")]
-    RequestBodyReadFailed {
+    RequestBodyRead {
         method: String,
         uri: String,
         version: String,
@@ -57,7 +57,7 @@ pub enum Error {
         message: String,
     },
     #[error("Failed to read response body: {message} (status: {status})")]
-    ResponseBodyReadFailed {
+    ResponseBodyRead {
         status: u16,
         version: String,
         headers: Vec<(String, String)>,
@@ -148,7 +148,7 @@ impl Server {
     ) -> Result<(), Error> {
         let listener = TcpListener::bind(self.addr)
             .await
-            .map_err(|e| Error::BindFailed {
+            .map_err(|e| Error::BindAddress {
                 addr: self.addr,
                 source: e,
             })?;
@@ -159,7 +159,7 @@ impl Server {
             tokio::select! {
                 accept_result = listener.accept() => {
                     let (socket, socket_addr) = accept_result
-                        .map_err(Error::AcceptFailed)?;
+                        .map_err(Error::AcceptConnection)?;
 
                     let _ = self.message_channel
                         .send(Message::ClientConnected(socket_addr))
@@ -425,7 +425,7 @@ fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     if let Some(host) = uri.host() {
         Ok(host.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::AddressResolutionFailed {
+        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
             message: "Invalid HOST header format (not UTF-8)".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -436,7 +436,7 @@ fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
             None => Ok(host_str.to_string()),
         }
     } else {
-        Err(Error::AddressResolutionFailed {
+        Err(Error::TargetAddress {
             message: "Missing host information in URI or Host header".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -454,7 +454,7 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
         let port = uri.port_u16().unwrap_or(default_port);
         Ok(port.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::AddressResolutionFailed {
+        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
             message: "Invalid HOST header format (not UTF-8)".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -468,7 +468,7 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
             None => Ok(default_port.to_string()),
         }
     } else {
-        Err(Error::AddressResolutionFailed {
+        Err(Error::TargetAddress {
             message: "Missing port information in URI or Host header".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -488,7 +488,7 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::RequestBodyReadFailed {
+        .map_err(|e| Error::RequestBodyRead {
             method: parts.method.to_string(),
             uri: parts.uri.to_string(),
             version: format!("{:?}", parts.version),
@@ -519,7 +519,7 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::ResponseBodyReadFailed {
+        .map_err(|e| Error::ResponseBodyRead {
             status: parts.status.as_u16(),
             version: format!("{:?}", parts.version),
             headers: headers_to_vec(&parts.headers),
@@ -557,7 +557,7 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
     if parts.uri.scheme().is_none()
         && let Some(host) = parts.headers.get(hyper::header::HOST)
     {
-        let host = host.to_str().map_err(|_| Error::AddressResolutionFailed {
+        let host = host.to_str().map_err(|_| Error::TargetAddress {
             message: "Invalid HOST header format (not UTF-8)".to_string(),
             uri: parts.uri.to_string(),
             headers: headers_to_vec(&parts.headers),
