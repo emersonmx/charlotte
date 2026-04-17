@@ -40,6 +40,21 @@ pub enum Error {
     },
     #[error("Failed to accept connection: {0}")]
     AcceptFailed(#[source] std::io::Error),
+    #[error(
+        "Failed to read request body: {message} (method: {method}, url: {url}, headers: {headers:?})"
+    )]
+    RequestBodyReadFailed {
+        method: String,
+        url: String,
+        headers: Vec<(String, String)>,
+        message: String,
+    },
+    #[error("Failed to read response body: {message} (status: {status}, headers: {headers:?})")]
+    ResponseBodyReadFailed {
+        status: u16,
+        headers: Vec<(String, String)>,
+        message: String,
+    },
 }
 
 pub type RequestId = usize;
@@ -419,7 +434,12 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
+        .map_err(|e| Error::RequestBodyReadFailed {
+            method: parts.method.to_string(),
+            url: parts.uri.to_string(),
+            headers: headers_to_vec(&parts.headers),
+            message: format!("{e:?}"),
+        })?
         .to_bytes();
     Ok((parts, body))
 }
@@ -443,7 +463,11 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::Proxy(format!("Body error: {e:?}")))?
+        .map_err(|e| Error::ResponseBodyReadFailed {
+            status: parts.status.as_u16(),
+            headers: headers_to_vec(&parts.headers),
+            message: format!("{e:?}"),
+        })?
         .to_bytes();
     Ok((parts, body))
 }
