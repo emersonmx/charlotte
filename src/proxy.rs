@@ -359,7 +359,10 @@ impl Server {
             .send(Message::RequestSent((request_id, request)))
             .await;
 
-        let res = fetch(HyperRequest::from_parts(parts, fetch_body)).await?;
+        let self_clone = self.clone();
+        let res = self_clone
+            .fetch(HyperRequest::from_parts(parts, fetch_body))
+            .await?;
 
         let (parts, body) = extract_response_parts(res).await?;
         let client_body = boxed_body_from_bytes(body.clone());
@@ -372,6 +375,40 @@ impl Server {
             .await;
 
         Ok(HyperResponse::from_parts(parts, client_body))
+    }
+
+    async fn fetch(self: Arc<Self>, req: HyperRequest) -> Result<IncomingResponse, Error> {
+        let (mut parts, body) = req.into_parts();
+
+        let addr = get_target_addr(&parts.uri, &parts.headers)?;
+        let stream = TcpStream::connect(addr.clone()).await?;
+        let io = TokioIo::new(stream);
+
+        let (mut sender, conn) = ClientBuilder::new()
+            .preserve_header_case(true)
+            .title_case_headers(true)
+            .handshake(io)
+            .await?;
+        tokio::spawn(async move {
+            if let Err(err) = conn.await {
+                let _ = self
+                    .message_channel
+                    .send(Message::ErrorOccurred((None, err.into())))
+                    .await;
+            }
+        });
+
+        while parts.headers.get(hyper::header::HOST).is_some() {
+            parts.headers.remove(hyper::header::HOST);
+        }
+        let host_value = HeaderValue::from_str(&addr)
+            .map_err(|_| Error::Proxy("Could not parse the host header".to_string()))?;
+        let _ = parts.headers.insert(hyper::header::HOST, host_value);
+
+        let req = HyperRequest::from_parts(parts, body);
+        let res = sender.send_request(req).await?;
+
+        Ok(res)
     }
 }
 
@@ -507,37 +544,6 @@ fn headers_to_vec(headers: &HeaderMap) -> Vec<(String, String)> {
             )
         })
         .collect()
-}
-
-async fn fetch(req: HyperRequest) -> Result<IncomingResponse, Error> {
-    let (mut parts, body) = req.into_parts();
-
-    let addr = get_target_addr(&parts.uri, &parts.headers)?;
-    let stream = TcpStream::connect(addr.clone()).await?;
-    let io = TokioIo::new(stream);
-
-    let (mut sender, conn) = ClientBuilder::new()
-        .preserve_header_case(true)
-        .title_case_headers(true)
-        .handshake(io)
-        .await?;
-    tokio::spawn(async move {
-        if let Err(err) = conn.await {
-            eprintln!("Connection failed: {err:?}");
-        }
-    });
-
-    while parts.headers.get(hyper::header::HOST).is_some() {
-        parts.headers.remove(hyper::header::HOST);
-    }
-    let host_value = HeaderValue::from_str(&addr)
-        .map_err(|_| Error::Proxy("Could not parse the host header".to_string()))?;
-    let _ = parts.headers.insert(hyper::header::HOST, host_value);
-
-    let req = HyperRequest::from_parts(parts, body);
-    let res = sender.send_request(req).await?;
-
-    Ok(res)
 }
 
 fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Result<(), Error> {
