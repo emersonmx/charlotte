@@ -38,6 +38,8 @@ pub enum Error {
         #[source]
         source: std::io::Error,
     },
+    #[error("Failed to accept connection: {0}")]
+    AcceptFailed(#[source] std::io::Error),
 }
 
 pub type RequestId = usize;
@@ -132,7 +134,8 @@ impl Server {
         loop {
             tokio::select! {
                 accept_result = listener.accept() => {
-                    let (socket, socket_addr) = accept_result?;
+                    let (socket, socket_addr) = accept_result
+                        .map_err(Error::AcceptFailed)?;
 
                     let _ = self.message_channel
                         .send(Message::ClientConnected(socket_addr))
