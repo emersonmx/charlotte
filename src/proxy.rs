@@ -145,18 +145,19 @@ impl Server {
                 accept_result = listener.accept() => {
                     let (socket, socket_addr) = accept_result?;
 
-                    let message_channel = self.message_channel.clone();
-                    let _ = message_channel
+                    let _ = self.message_channel
                         .send(Message::ClientConnected(socket_addr))
                         .await;
 
-                    let server = self.clone();
                     let handler = {
+                        let server = self.clone();
                         move |req| {
-                            Server::proxy_handle(server.clone(), req, socket_addr)
+                            let server = server.clone();
+                            server.proxy_handle(req, socket_addr)
                         }
                     };
 
+                    let message_channel = self.message_channel.clone();
                     tokio::spawn(async move {
                         if let Err(err) = ServerBuilder::new()
                             .preserve_header_case(true)
@@ -219,7 +220,7 @@ impl Server {
 
         if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
             let self_arc = self.clone();
-            let message_channel = self.message_channel.clone();
+            let message_channel = self_arc.message_channel.clone();
             tokio::spawn(async move {
                 match hyper::upgrade::on(req).await {
                     Ok(upgraded) => {
@@ -293,9 +294,8 @@ impl Server {
 
         let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
 
-        let self_arc = self.clone();
         let handler = {
-            let self_arc = self_arc.clone();
+            let self_arc = self.clone();
             move |req| {
                 let self_arc = self_arc.clone();
                 self_arc.handle_regular(req, client_addr, true)
