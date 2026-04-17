@@ -54,18 +54,7 @@ impl Request {
         Ok(Self {
             method: parts.method.to_string(),
             url: parts.uri.to_string(),
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        k.as_str().to_string(),
-                        v.to_str()
-                            .unwrap_or("<invalid UTF-8 in header value>")
-                            .to_string(),
-                    )
-                })
-                .collect(),
+            headers: headers_to_vec(&parts.headers),
             body,
         })
     }
@@ -87,18 +76,7 @@ impl Response {
 
         Ok(Self {
             status: parts.status.as_u16(),
-            headers: parts
-                .headers
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        k.as_str().to_string(),
-                        v.to_str()
-                            .unwrap_or("<invalid UTF-8 in header value>")
-                            .to_string(),
-                    )
-                })
-                .collect(),
+            headers: headers_to_vec(&parts.headers),
             body,
         })
     }
@@ -463,6 +441,20 @@ fn clean_response_headers(headers: &mut HeaderMap) {
 
 fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
     Full::new(body).map_err(|e| match e {}).boxed()
+}
+
+fn headers_to_vec(headers: &HeaderMap) -> Vec<(String, String)> {
+    headers
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.as_str().to_string(),
+                v.to_str()
+                    .unwrap_or("<invalid UTF-8 in header value>")
+                    .to_string(),
+            )
+        })
+        .collect()
 }
 
 async fn fetch(req: HyperRequest) -> Result<IncomingResponse, Error> {
