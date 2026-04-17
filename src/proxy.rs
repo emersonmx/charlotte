@@ -32,6 +32,12 @@ pub enum Error {
     InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
+    #[error("Failed to listen on address: {addr}, error: {source}")]
+    BindFailed {
+        addr: std::net::SocketAddr,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 pub type RequestId = usize;
@@ -114,7 +120,12 @@ impl Server {
         self: Arc<Self>,
         mut abort_channel: oneshot::Receiver<()>,
     ) -> Result<(), Error> {
-        let listener = TcpListener::bind(self.addr).await?;
+        let listener = TcpListener::bind(self.addr)
+            .await
+            .map_err(|e| Error::BindFailed {
+                addr: self.addr,
+                source: e,
+            })?;
 
         let _ = self.message_channel.send(Message::ServerStarted).await;
 
