@@ -33,7 +33,7 @@ pub enum Error {
     #[error("{0}")]
     Proxy(String),
     #[error("{message} (uri: {uri}, headers: {headers:?})")]
-    PortResolutionFailed {
+    AddressResolutionFailed {
         message: String,
         uri: String,
         headers: Vec<(String, String)>,
@@ -385,18 +385,22 @@ fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     if let Some(host) = uri.host() {
         Ok(host.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host
-            .to_str()
-            .map_err(|_| Error::Proxy("Invalid HOST header format (not UTF-8)".to_string()))?;
+        let host_str = host.to_str().map_err(|_| Error::AddressResolutionFailed {
+            message: "Invalid HOST header format (not UTF-8)".to_string(),
+            uri: uri.to_string(),
+            headers: headers_to_vec(headers),
+        })?;
 
         match host_str.rsplit_once(':') {
             Some((host, _)) => Ok(host.to_string()),
             None => Ok(host_str.to_string()),
         }
     } else {
-        Err(Error::Proxy(
-            "Missing host information in URI or Host header".to_string(),
-        ))
+        Err(Error::AddressResolutionFailed {
+            message: "Missing host information in URI or Host header".to_string(),
+            uri: uri.to_string(),
+            headers: headers_to_vec(headers),
+        })
     }
 }
 
@@ -410,7 +414,7 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
         let port = uri.port_u16().unwrap_or(default_port);
         Ok(port.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::PortResolutionFailed {
+        let host_str = host.to_str().map_err(|_| Error::AddressResolutionFailed {
             message: "Invalid HOST header format (not UTF-8)".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -424,7 +428,7 @@ fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
             None => Ok(default_port.to_string()),
         }
     } else {
-        Err(Error::PortResolutionFailed {
+        Err(Error::AddressResolutionFailed {
             message: "Missing port information in URI or Host header".to_string(),
             uri: uri.to_string(),
             headers: headers_to_vec(headers),
@@ -540,9 +544,11 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
     if parts.uri.scheme().is_none()
         && let Some(host) = parts.headers.get(hyper::header::HOST)
     {
-        let host = host
-            .to_str()
-            .map_err(|_| Error::Proxy("Host inválido".to_string()))?;
+        let host = host.to_str().map_err(|_| Error::AddressResolutionFailed {
+            message: "Invalid HOST header format (not UTF-8)".to_string(),
+            uri: parts.uri.to_string(),
+            headers: headers_to_vec(&parts.headers),
+        })?;
         let scheme = if is_tls { "https" } else { "http" };
         let new_uri = format!("{}://{}{}", scheme, host, parts.uri);
         let uri = new_uri.parse::<Uri>()?;
