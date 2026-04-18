@@ -137,27 +137,25 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(addr: std::net::SocketAddr, message_channel: mpsc::Sender<Message>) -> Arc<Self> {
+    pub fn new(addr: std::net::SocketAddr, message_channel: mpsc::Sender<Message>) -> Self {
         let request_id_counter = Arc::new(AtomicUsize::new(1));
-        Arc::new(Self {
+        Self {
             addr,
             message_channel,
             request_id_counter,
-        })
+        }
     }
 
-    pub async fn run(
-        self: Arc<Self>,
-        mut abort_channel: oneshot::Receiver<()>,
-    ) -> Result<(), Error> {
-        let listener = TcpListener::bind(self.addr)
+    pub async fn run(self, mut abort_channel: oneshot::Receiver<()>) -> Result<(), Error> {
+        let self_arc = Arc::new(self);
+        let listener = TcpListener::bind(self_arc.addr)
             .await
             .map_err(|e| Error::BindAddress {
-                addr: self.addr,
+                addr: self_arc.addr,
                 source: e,
             })?;
 
-        let _ = self.message_channel.send(Message::ServerStarted).await;
+        let _ = self_arc.message_channel.send(Message::ServerStarted).await;
 
         loop {
             tokio::select! {
@@ -165,19 +163,19 @@ impl Server {
                     let (socket, socket_addr) = accept_result
                         .map_err(Error::AcceptConnection)?;
 
-                    let _ = self.message_channel
+                    let _ = self_arc.message_channel
                         .send(Message::ClientConnected(socket_addr))
                         .await;
 
                     let handler = {
-                        let self_clone = self.clone();
+                        let self_clone = self_arc.clone();
                         move |req| {
                             let self_clone = self_clone.clone();
                             self_clone.proxy_handle(req, socket_addr)
                         }
                     };
 
-                    let message_channel = self.message_channel.clone();
+                    let message_channel = self_arc.message_channel.clone();
                     tokio::spawn(async move {
                         if let Err(err) = ServerBuilder::new()
                             .preserve_header_case(true)
@@ -203,7 +201,7 @@ impl Server {
             }
         }
 
-        let _ = self.message_channel.send(Message::ServerStopped).await;
+        let _ = self_arc.message_channel.send(Message::ServerStopped).await;
 
         Ok(())
     }
