@@ -26,19 +26,9 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("hyper error: {0}")]
     Hyper(#[from] hyper::Error),
-    #[error("http error: {0}")]
-    Http(#[from] hyper::http::Error),
-    #[error("invalid uri: {0}")]
-    InvalidUri(#[from] hyper::http::uri::InvalidUri),
     #[error("{0}")]
     Proxy(String),
 
-    #[error("{message} (uri: {uri}, headers: {headers:?})")]
-    TargetAddress {
-        message: String,
-        uri: String,
-        headers: Vec<(String, String)>,
-    },
     #[error("Failed to listen on address: {addr}, error: {source}")]
     BindAddress {
         addr: std::net::SocketAddr,
@@ -47,14 +37,22 @@ pub enum Error {
     },
     #[error("Failed to accept connection: {0}")]
     AcceptConnection(#[source] std::io::Error),
+    #[error("{message} (uri: {uri}, headers: {headers:?})")]
+    TargetAddress {
+        message: String,
+        uri: String,
+        headers: Vec<(String, String)>,
+    },
+    #[error("Failed to fix relative URI: {0:?}")]
+    FixRelativeUri(Box<RequestContextError>),
     #[error("Failed to read request body: {0:?}")]
-    RequestBodyRead(Box<RequestBodyReadError>),
+    RequestBodyRead(Box<RequestContextError>),
     #[error("Failed to read response body: {0:?}")]
-    ResponseBodyRead(Box<ResponseBodyReadError>),
+    ResponseBodyRead(Box<ResponseContextError>),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct RequestBodyReadError {
+pub struct RequestContextError {
     pub method: String,
     pub uri: String,
     pub version: String,
@@ -64,7 +62,7 @@ pub struct RequestBodyReadError {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct ResponseBodyReadError {
+pub struct ResponseContextError {
     pub status: u16,
     pub version: String,
     pub headers: Vec<(String, String)>,
@@ -495,7 +493,7 @@ where
         .collect()
         .await
         .map_err(|e| {
-            Error::RequestBodyRead(Box::new(RequestBodyReadError {
+            Error::RequestBodyRead(Box::new(RequestContextError {
                 method: parts.method.to_string(),
                 uri: parts.uri.to_string(),
                 version: format!("{:?}", parts.version),
@@ -528,7 +526,7 @@ where
         .collect()
         .await
         .map_err(|e| {
-            Error::ResponseBodyRead(Box::new(ResponseBodyReadError {
+            Error::ResponseBodyRead(Box::new(ResponseContextError {
                 status: parts.status.as_u16(),
                 version: format!("{:?}", parts.version),
                 headers: headers_to_vec(&parts.headers),
@@ -567,14 +565,28 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
     if parts.uri.scheme().is_none()
         && let Some(host) = parts.headers.get(hyper::header::HOST)
     {
-        let host = host.to_str().map_err(|_| Error::TargetAddress {
-            message: "Invalid HOST header format (not UTF-8)".to_string(),
-            uri: parts.uri.to_string(),
-            headers: headers_to_vec(&parts.headers),
+        let host = host.to_str().map_err(|_| {
+            Error::FixRelativeUri(Box::new(RequestContextError {
+                method: parts.method.to_string(),
+                uri: parts.uri.to_string(),
+                version: format!("{:?}", parts.version),
+                headers: headers_to_vec(&parts.headers),
+                extensions: format!("{:?}", parts.extensions),
+                message: "Invalid HOST header format (not UTF-8)".to_string(),
+            }))
         })?;
         let scheme = if is_tls { "https" } else { "http" };
         let new_uri = format!("{}://{}{}", scheme, host, parts.uri);
-        let uri = new_uri.parse::<Uri>()?;
+        let uri = new_uri.parse::<Uri>().map_err(|e| {
+            Error::FixRelativeUri(Box::new(RequestContextError {
+                method: parts.method.to_string(),
+                uri: parts.uri.to_string(),
+                version: format!("{:?}", parts.version),
+                headers: headers_to_vec(&parts.headers),
+                extensions: format!("{:?}", parts.extensions),
+                message: format!("Failed to parse fixed URI: {e}"),
+            }))
+        })?;
         parts.uri = uri;
     }
     Ok(())
