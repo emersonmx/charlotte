@@ -47,23 +47,29 @@ pub enum Error {
     },
     #[error("Failed to accept connection: {0}")]
     AcceptConnection(#[source] std::io::Error),
-    #[error("Failed to read request body: {message} (method: {method}, uri: {uri})")]
-    RequestBodyRead {
-        method: String,
-        uri: String,
-        version: String,
-        headers: Vec<(String, String)>,
-        extensions: String,
-        message: String,
-    },
-    #[error("Failed to read response body: {message} (status: {status})")]
-    ResponseBodyRead {
-        status: u16,
-        version: String,
-        headers: Vec<(String, String)>,
-        extensions: String,
-        message: String,
-    },
+    #[error("Failed to read request body: {0:?}")]
+    RequestBodyRead(Box<RequestBodyReadError>),
+    #[error("Failed to read response body: {0:?}")]
+    ResponseBodyRead(Box<ResponseBodyReadError>),
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RequestBodyReadError {
+    pub method: String,
+    pub uri: String,
+    pub version: String,
+    pub headers: Vec<(String, String)>,
+    pub extensions: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ResponseBodyReadError {
+    pub status: u16,
+    pub version: String,
+    pub headers: Vec<(String, String)>,
+    pub extensions: String,
+    pub message: String,
 }
 
 pub type RequestId = usize;
@@ -488,13 +494,15 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::RequestBodyRead {
-            method: parts.method.to_string(),
-            uri: parts.uri.to_string(),
-            version: format!("{:?}", parts.version),
-            headers: headers_to_vec(&parts.headers),
-            extensions: format!("{:?}", parts.extensions),
-            message: format!("{e:?}"),
+        .map_err(|e| {
+            Error::RequestBodyRead(Box::new(RequestBodyReadError {
+                method: parts.method.to_string(),
+                uri: parts.uri.to_string(),
+                version: format!("{:?}", parts.version),
+                headers: headers_to_vec(&parts.headers),
+                extensions: format!("{:?}", parts.extensions),
+                message: format!("{e:?}"),
+            }))
         })?
         .to_bytes();
     Ok((parts, body))
@@ -519,12 +527,14 @@ where
     let body = body
         .collect()
         .await
-        .map_err(|e| Error::ResponseBodyRead {
-            status: parts.status.as_u16(),
-            version: format!("{:?}", parts.version),
-            headers: headers_to_vec(&parts.headers),
-            extensions: format!("{:?}", parts.extensions),
-            message: format!("{e:?}"),
+        .map_err(|e| {
+            Error::ResponseBodyRead(Box::new(ResponseBodyReadError {
+                status: parts.status.as_u16(),
+                version: format!("{:?}", parts.version),
+                headers: headers_to_vec(&parts.headers),
+                extensions: format!("{:?}", parts.extensions),
+                message: format!("{e:?}"),
+            }))
         })?
         .to_bytes();
     Ok((parts, body))
