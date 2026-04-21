@@ -2,7 +2,7 @@
     cargo build
 
 @run:
-    cargo run --bin charlotte
+    cargo run --bin tui
 
 @watch:
     bacon

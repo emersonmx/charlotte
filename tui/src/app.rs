@@ -1,4 +1,4 @@
-use crate::{proxy, requests_screen::RequestsScreen, waiting_screen::WaitingScreen};
+use crate::{requests_screen::RequestsScreen, waiting_screen::WaitingScreen};
 use async_trait::async_trait;
 use crossterm::event::EventStream;
 use ratatui::{DefaultTerminal, Frame};

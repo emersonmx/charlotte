@@ -1,7 +1,4 @@
-use crate::{
-    app::{Action, Event, NavigationPolicy, Screen, ScreenId},
-    proxy,
-};
+use crate::app::{Action, Event, NavigationPolicy, Screen, ScreenId};
 use async_trait::async_trait;
 use crossterm::event::KeyCode;
 use ratatui::{

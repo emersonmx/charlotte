@@ -1,0 +1,18 @@
+[package]
+name = "tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+proxy = { path = "../proxy" }
+
+[dev-dependencies]
+rstest = "0.26.1"
