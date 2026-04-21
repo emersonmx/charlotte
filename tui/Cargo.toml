@@ -9,7 +9,6 @@ anyhow.workspace = true
 clap.workspace = true
 crossterm.workspace = true
 ratatui.workspace = true
-thiserror.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 proxy = { path = "../proxy" }
