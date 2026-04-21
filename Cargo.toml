@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["gencert","proxy", "tui"]
+members = ["gencert", "proxy", "tui"]
 
 [workspace.dependencies]
 anyhow = "1.0"
