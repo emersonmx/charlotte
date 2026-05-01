@@ -13,6 +13,7 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
 
+#[derive(Debug, PartialEq)]
 pub enum Message {
     StoreRequest(Box<(proxy::RequestId, proxy::Request)>),
     StoreResponse(Box<(proxy::RequestId, proxy::Response)>),

@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
 };
 
+#[derive(Debug, PartialEq)]
 pub enum Message {
     UpdateTableState(Box<RequestEntryRow>),
     SelectPreviousRow,

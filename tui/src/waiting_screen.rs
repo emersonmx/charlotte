@@ -54,3 +54,40 @@ impl Screen for WaitingScreen {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use ratatui::{Terminal, backend::TestBackend};
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn terminal() -> Terminal<TestBackend> {
+        Terminal::new(TestBackend::new(80, 24)).unwrap()
+    }
+
+    #[fixture]
+    fn screen() -> WaitingScreen {
+        WaitingScreen::new("localhost".to_string(), 8888)
+    }
+
+    #[rstest]
+    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut screen: WaitingScreen) {
+        terminal.draw(|frame| screen.draw(frame)).unwrap();
+        assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn quit_on_q_key(mut screen: WaitingScreen) {
+        let quit_event = Event::Key(crossterm::event::KeyEvent {
+            code: crossterm::event::KeyCode::Char('q'),
+            modifiers: crossterm::event::KeyModifiers::NONE,
+            kind: crossterm::event::KeyEventKind::Press,
+            state: crossterm::event::KeyEventState::NONE,
+        });
+
+        let message = screen.handle_event(quit_event);
+        assert_eq!(message, Some(AppMessage::Quit));
+    }
+}
