@@ -247,7 +247,7 @@ impl App {
     }
 }
 
-pub fn is_quit_key_event(event: Event) -> Option<Message> {
+pub fn is_quit_key_event(event: &Event) -> Option<Message> {
     if let Event::Key(key_event) = event
         && key_event.code == crossterm::event::KeyCode::Char('q')
     {
