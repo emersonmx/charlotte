@@ -1,6 +1,5 @@
 use crate::app::{Message as AppMessage, Screen};
-use crossterm::event::Event;
-use crossterm::event::KeyCode;
+use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
     layout::Rect,
