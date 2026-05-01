@@ -1,0 +1,10 @@
+[pre-commit]
+parallel = true
+
+[[pre-commit.jobs]]
+name = "format"
+run = "just format --verbose"
+
+[[pre-commit.jobs]]
+name = "lint-fix"
+run = "just lint-fix"
