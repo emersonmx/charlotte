@@ -26,18 +26,6 @@ pub struct RequestEntryRow {
     status: String,
 }
 
-impl From<RequestEntryRow> for Row<'_> {
-    fn from(row: RequestEntryRow) -> Self {
-        Row::new(vec![
-            Cell::from(Text::from(row.request_id).alignment(Alignment::Right)),
-            Cell::from(row.method),
-            Cell::from(row.url),
-            Cell::from(row.body),
-            Cell::from(row.status),
-        ])
-    }
-}
-
 impl From<&RequestEntry> for RequestEntryRow {
     fn from(entry: &RequestEntry) -> Self {
         let status = if let Some(response) = &entry.response {
@@ -53,6 +41,18 @@ impl From<&RequestEntry> for RequestEntryRow {
             body: String::from_utf8_lossy(&entry.request.body).to_string(),
             status,
         }
+    }
+}
+
+impl From<RequestEntryRow> for Row<'_> {
+    fn from(row: RequestEntryRow) -> Self {
+        Row::new(vec![
+            Cell::from(Text::from(row.request_id).alignment(Alignment::Right)),
+            Cell::from(row.method),
+            Cell::from(row.url),
+            Cell::from(row.body),
+            Cell::from(row.status),
+        ])
     }
 }
 
