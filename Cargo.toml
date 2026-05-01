@@ -3,19 +3,19 @@ resolver = "3"
 members = ["gencert", "proxy", "tui"]
 
 [workspace.dependencies]
-anyhow = "1.0"
-async-trait = "0.1"
-clap = { version = "4.6.0", features = ["derive"] }
-crossterm = { version = "0.29.0", features = ["event-stream"] }
+anyhow = "1"
+clap = { version = "4.6", features = ["derive"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 http-body-util = "0.1"
-hyper = { version = "1.8.1", features = ["full"] }
-hyper-util = { version = "0.1.19", features = ["full"] }
+hyper = { version = "1.8", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
 ratatui = "0.30"
+ratatui-textarea = "0.9"
 rcgen = { version = "0.14", features = ["x509-parser"] }
-rustls = { version = "0.23.35", features = ["aws-lc-rs", "std"] }
-thiserror = "2.0"
-tokio = { version = "1.48.0", features = ["full"] }
-tokio-rustls = "0"
+rustls = { version = "0.23", features = ["aws-lc-rs", "std"] }
+thiserror = "2"
+tokio = { version = "1.48", features = ["full"] }
+tokio-rustls = "0.26"
 tokio-stream = "0.1"
 
 [profile.dev]

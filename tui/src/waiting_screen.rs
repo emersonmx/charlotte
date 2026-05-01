@@ -1,5 +1,5 @@
-use crate::app::{Action, Event, NavigationPolicy, Screen, ScreenId};
-use async_trait::async_trait;
+use crate::app::{Message as AppMessage, Screen};
+use crossterm::event::Event;
 use crossterm::event::KeyCode;
 use ratatui::{
     Frame,
@@ -7,7 +7,6 @@ use ratatui::{
     text::Text,
     widgets::{Block, Paragraph},
 };
-use std::sync::Arc;
 
 fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
     let x = area.x + (area.width.saturating_sub(width)) / 2;
@@ -15,7 +14,6 @@ fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
     Rect::new(x, y, width, height)
 }
 
-#[derive(Debug)]
 pub struct WaitingScreen {
     server_host: String,
     server_port: u16,
@@ -30,35 +28,7 @@ impl WaitingScreen {
     }
 }
 
-#[async_trait]
 impl Screen for WaitingScreen {
-    fn id(&self) -> ScreenId {
-        ScreenId::Waiting
-    }
-
-    async fn handle_event(&mut self, event: &Event) -> Option<Action> {
-        match event {
-            Event::CrosstermEvent(event) => {
-                if let crossterm::event::Event::Key(key_event) = event
-                    && let KeyCode::Char('q') = key_event.code
-                {
-                    return Some(Action::Exit);
-                }
-            }
-            Event::ProxyMessage(message) => {
-                if let proxy::Message::RequestSent(_) = message.as_ref() {
-                    return Some(Action::ForwardToScreen(
-                        ScreenId::Requests,
-                        Event::ProxyMessage(Arc::clone(message)),
-                        NavigationPolicy::Clear,
-                    ));
-                }
-            }
-        };
-
-        None
-    }
-
     fn draw(&mut self, frame: &mut Frame) {
         let message = format!(
             "Waiting for requests on {}:{} (press 'q' to quit)",
@@ -75,5 +45,19 @@ impl Screen for WaitingScreen {
         let paragraph = Paragraph::new(text).centered().block(block);
 
         frame.render_widget(paragraph, centered_area);
+    }
+
+    fn handle_event(&mut self, event: Event) -> Option<AppMessage> {
+        if let Event::Key(key_event) = event
+            && key_event.code == KeyCode::Char('q')
+        {
+            return Some(AppMessage::Quit);
+        }
+
+        None
+    }
+
+    fn update(&mut self, _message: AppMessage) -> Option<AppMessage> {
+        None
     }
 }
