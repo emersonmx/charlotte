@@ -128,14 +128,15 @@ impl RequestsScreen {
         let table = Table::new(
             rows,
             [
-                Constraint::Length(self.column_widths.request_id + 2),
-                Constraint::Length(self.column_widths.method + 2),
-                Constraint::Length(self.column_widths.url + 2),
-                Constraint::Min(self.column_widths.body + 2),
-                Constraint::Length(self.column_widths.status + 2),
+                Constraint::Length(self.column_widths.request_id),
+                Constraint::Length(self.column_widths.method),
+                Constraint::Length(self.column_widths.url),
+                Constraint::Min(self.column_widths.body),
+                Constraint::Length(self.column_widths.status),
             ],
         )
         .header(header.into())
+        .column_spacing(1)
         .row_highlight_style(
             Style::default()
                 .bg(tailwind::GRAY.c100)
