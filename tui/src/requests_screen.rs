@@ -5,11 +5,14 @@ use ratatui::{
     layout::{Alignment, Constraint, Margin},
     style::palette::tailwind,
     text::Text,
-    widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
+    widgets::{
+        Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
+        TableState,
+    },
 };
 
 pub enum Message {
-    UpdateTableColumnWidths(Box<RequestEntryRow>),
+    UpdateTableState(Box<RequestEntryRow>),
     SelectPreviousRow,
     SelectNextRow,
 }
@@ -115,23 +118,6 @@ impl RequestsScreen {
 
 impl RequestsScreen {
     fn draw_table(&mut self, frame: &mut Frame) {
-        let area = frame.area();
-        let requests_len = match self.request_store.lock() {
-            Ok(store) => store.len(),
-            Err(_) => 0,
-        };
-
-        let visible_rows = area.height.saturating_sub(1) as usize;
-        let selected = self.table_state.selected().unwrap_or(0);
-        let start = if selected >= visible_rows {
-            selected - visible_rows + 1
-        } else {
-            0
-        };
-        let end = (start + visible_rows).min(requests_len);
-        let mut visible_state = TableState::default();
-        visible_state.select(Some(selected - start));
-
         let header = RequestEntryRow {
             request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
             method: Self::TABLE_COLUMN_METHOD.to_string(),
@@ -140,10 +126,7 @@ impl RequestsScreen {
             status: Self::TABLE_COLUMN_STATUS.to_string(),
         };
         let rows: Vec<RequestEntryRow> = match self.request_store.lock() {
-            Ok(store) => store
-                .range(start..=end)
-                .map(|(_, entry)| entry.into())
-                .collect(),
+            Ok(store) => store.values().map(|entry| entry.into()).collect(),
             Err(_) => vec![],
         };
 
@@ -177,21 +160,38 @@ impl RequestsScreen {
         );
     }
 
+    fn update_table_state(&mut self, row: RequestEntryRow) {
+        self.column_widths.update(row);
+
+        if self.table_state.selected().is_none() {
+            self.table_state.select(Some(0));
+        }
+        self.table_scroll_state = self
+            .table_scroll_state
+            .content_length(self.requests_length() - 1);
+    }
+
     fn select_previous_row(&mut self) {
         let selected = self.table_state.selected().unwrap_or(0);
         if selected > 0 {
             self.table_state.select(Some(selected - 1));
+            self.table_scroll_state.scroll(ScrollDirection::Backward)
         }
     }
 
     fn select_next_row(&mut self) {
-        let len = match self.request_store.lock() {
-            Ok(store) => store.len(),
-            Err(_) => 0,
-        };
+        let len = self.requests_length();
         let selected = self.table_state.selected().unwrap_or(0);
         if selected < len - 1 {
             self.table_state.select(Some(selected + 1));
+            self.table_scroll_state.scroll(ScrollDirection::Forward);
+        }
+    }
+
+    fn requests_length(&self) -> usize {
+        match self.request_store.lock() {
+            Ok(store) => store.len(),
+            Err(_) => 0,
         }
     }
 }
@@ -225,9 +225,7 @@ impl Screen for RequestsScreen {
         };
 
         match message {
-            Message::UpdateTableColumnWidths(row) => {
-                self.column_widths.update(*row);
-            }
+            Message::UpdateTableState(row) => self.update_table_state(*row),
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
         }

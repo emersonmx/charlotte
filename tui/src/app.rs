@@ -208,10 +208,8 @@ impl App {
                 store.insert(request_id, request_entry.clone());
 
                 Some(
-                    RequestsScreenMessage::UpdateTableColumnWidths(Box::new(
-                        (&request_entry).into(),
-                    ))
-                    .into(),
+                    RequestsScreenMessage::UpdateTableState(Box::new((&request_entry).into()))
+                        .into(),
                 )
             }
             Err(_) => Some(Message::Quit),
@@ -234,7 +232,7 @@ impl App {
                     request_entry.response = Some(response);
 
                     return Some(
-                        RequestsScreenMessage::UpdateTableColumnWidths(Box::new(
+                        RequestsScreenMessage::UpdateTableState(Box::new(
                             request_entry.deref().into(),
                         ))
                         .into(),
