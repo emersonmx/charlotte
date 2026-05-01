@@ -14,10 +14,10 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
 
 pub enum Message {
-    RequestsScreen(RequestsScreenMessage),
     StoreRequest(Box<(proxy::RequestId, proxy::Request)>),
     StoreResponse(Box<(proxy::RequestId, proxy::Response)>),
     Quit,
+    RequestsScreen(RequestsScreenMessage),
 }
 
 pub trait Screen {
@@ -165,7 +165,6 @@ impl App {
 
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
-            Message::Quit => self.quit(),
             Message::StoreRequest(message) => {
                 let (request_id, request) = *message;
                 self.store_request(request_id, request)
@@ -174,6 +173,7 @@ impl App {
                 let (request_id, response) = *message;
                 self.store_response(request_id, response)
             }
+            Message::Quit => self.quit(),
             message => self.screen.update(message),
         }
     }
