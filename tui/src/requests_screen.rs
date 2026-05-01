@@ -209,8 +209,8 @@ impl Screen for RequestsScreen {
 
         if let Event::Key(key_event) = event {
             match key_event.code {
-                KeyCode::Up => return Some(Message::SelectPreviousRow.into()),
-                KeyCode::Down => return Some(Message::SelectNextRow.into()),
+                KeyCode::Up | KeyCode::Char('k') => return Some(Message::SelectPreviousRow.into()),
+                KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
                 _ => {}
             }
         }
