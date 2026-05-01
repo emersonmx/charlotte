@@ -120,39 +120,41 @@ impl RequestsScreen {
             body: Self::TABLE_COLUMN_BODY.to_string(),
             status: Self::TABLE_COLUMN_STATUS.to_string(),
         };
-        let rows: Vec<RequestEntryRow> = match self.request_store.lock() {
-            Ok(store) => store.values().map(|entry| entry.into()).collect(),
+        let rows = match self.request_store.lock() {
+            Ok(store) => store
+                .values()
+                .map(RequestEntryRow::from)
+                .map(Row::from)
+                .collect(),
             Err(_) => vec![],
         };
 
-        let table = Table::new(
-            rows,
-            [
+        let table = Table::default()
+            .header(header.into())
+            .widths([
                 Constraint::Length(self.column_widths.request_id),
                 Constraint::Length(self.column_widths.method),
                 Constraint::Length(self.column_widths.url),
                 Constraint::Min(self.column_widths.body),
                 Constraint::Length(self.column_widths.status),
-            ],
-        )
-        .header(header.into())
-        .column_spacing(1)
-        .row_highlight_style(
-            Style::default()
-                .bg(tailwind::GRAY.c100)
-                .fg(tailwind::GRAY.c900),
-        );
+            ])
+            .column_spacing(1)
+            .rows(rows)
+            .row_highlight_style(
+                Style::default()
+                    .bg(tailwind::GRAY.c100)
+                    .fg(tailwind::GRAY.c900),
+            );
 
         frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
 
     fn draw_scrollbar(&mut self, frame: &mut Frame) {
-        let area = frame.area();
         frame.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .style(tailwind::GRAY.c400),
-            area.inner(Margin {
+            frame.area().inner(Margin {
                 vertical: 1,
                 horizontal: 0,
             }),
