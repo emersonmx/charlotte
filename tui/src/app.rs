@@ -231,7 +231,7 @@ impl App {
         match self.request_store.lock() {
             Ok(mut store) => {
                 if let Some(request_entry) = store.get_mut(&request_id) {
-                    request_entry.response = Some(response.clone());
+                    request_entry.response = Some(response);
 
                     return Some(
                         RequestsScreenMessage::UpdateTableColumnWidths(Box::new(
