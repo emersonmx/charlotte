@@ -1,5 +1,5 @@
-use crate::app::{Message as AppMessage, RequestEntry, RequestStore, Screen};
-use crossterm::event::{Event, KeyCode};
+use crate::app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event};
+use crossterm::event::Event;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint},
@@ -135,13 +135,7 @@ impl Screen for RequestsScreen {
     }
 
     fn handle_event(&mut self, event: Event) -> Option<AppMessage> {
-        if let Event::Key(key_event) = event
-            && key_event.code == KeyCode::Char('q')
-        {
-            return Some(AppMessage::Quit);
-        }
-
-        None
+        is_quit_key_event(event)
     }
 
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
