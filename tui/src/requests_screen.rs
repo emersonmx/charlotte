@@ -3,7 +3,7 @@ use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Margin},
-    style::palette::tailwind,
+    style::{Style, palette::tailwind},
     text::Text,
     widgets::{
         Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
@@ -141,7 +141,11 @@ impl RequestsScreen {
             ],
         )
         .header(header.into())
-        .row_highlight_style(tailwind::BLUE.c400);
+        .row_highlight_style(
+            Style::default()
+                .bg(tailwind::GRAY.c100)
+                .fg(tailwind::GRAY.c900),
+        );
 
         frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
     }
@@ -154,7 +158,7 @@ impl RequestsScreen {
                 .style(tailwind::GRAY.c400),
             area.inner(Margin {
                 vertical: 1,
-                horizontal: 1,
+                horizontal: 0,
             }),
             &mut self.table_scroll_state,
         );
