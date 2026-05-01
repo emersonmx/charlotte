@@ -5,10 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Margin},
     style::{Style, palette::tailwind},
     text::Text,
-    widgets::{
-        Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
-        TableState,
-    },
+    widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
 };
 
 pub enum Message {
@@ -89,7 +86,6 @@ pub struct RequestsScreen {
 }
 
 impl RequestsScreen {
-    const TABLE_SCROLL_CONTENT_LENGTH: usize = 50;
     const TABLE_COLUMN_REQ_ID: &str = "ReqId";
     const TABLE_COLUMN_METHOD: &str = "Method";
     const TABLE_COLUMN_URL: &str = "URL";
@@ -109,9 +105,8 @@ impl RequestsScreen {
         Self {
             request_store,
             column_widths,
-            table_state: TableState::default().with_selected(Some(0)),
-            table_scroll_state: ScrollbarState::default()
-                .content_length(Self::TABLE_SCROLL_CONTENT_LENGTH),
+            table_state: TableState::default(),
+            table_scroll_state: ScrollbarState::default(),
         }
     }
 }
@@ -168,28 +163,21 @@ impl RequestsScreen {
         self.column_widths.update(row);
 
         if self.table_state.selected().is_none() {
-            self.table_state.select(Some(0));
+            self.table_state.select_first();
         }
         self.table_scroll_state = self
             .table_scroll_state
-            .content_length(self.requests_length() - 1);
+            .content_length(self.requests_length());
     }
 
     fn select_previous_row(&mut self) {
-        let selected = self.table_state.selected().unwrap_or(0);
-        if selected > 0 {
-            self.table_state.select(Some(selected - 1));
-            self.table_scroll_state.scroll(ScrollDirection::Backward)
-        }
+        self.table_state.select_previous();
+        self.table_scroll_state.prev();
     }
 
     fn select_next_row(&mut self) {
-        let len = self.requests_length();
-        let selected = self.table_state.selected().unwrap_or(0);
-        if selected < len - 1 {
-            self.table_state.select(Some(selected + 1));
-            self.table_scroll_state.scroll(ScrollDirection::Forward);
-        }
+        self.table_state.select_next();
+        self.table_scroll_state.next();
     }
 
     fn requests_length(&self) -> usize {
