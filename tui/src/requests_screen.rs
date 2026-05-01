@@ -34,7 +34,7 @@ impl From<&RequestEntry> for RequestEntryRow {
         let status = if let Some(response) = &entry.response {
             response.status.to_string()
         } else {
-            RequestsScreen::ROW_STATUS_PENDING.to_string()
+            "Pending".to_string()
         };
 
         RequestEntryRow {
@@ -91,7 +91,6 @@ impl RequestsScreen {
     const TABLE_COLUMN_URL: &str = "URL";
     const TABLE_COLUMN_BODY: &str = "Body";
     const TABLE_COLUMN_STATUS: &str = "Status";
-    const ROW_STATUS_PENDING: &str = "Pending";
 
     pub fn new(request_store: RequestStore) -> Self {
         let mut column_widths = RequestTableColumnWidths::default();
