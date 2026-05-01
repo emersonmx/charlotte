@@ -1,3 +1,6 @@
+@setup:
+    lefthook install
+
 @build *ARGS:
     cargo build {{ ARGS }}
 
