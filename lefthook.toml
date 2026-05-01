@@ -1,10 +1,5 @@
-[pre-commit]
-parallel = true
+[pre-commit.commands.format]
+run = "just format --check --verbose"
 
-[[pre-commit.jobs]]
-name = "format"
-run = "just format --verbose"
-
-[[pre-commit.jobs]]
-name = "lint-fix"
-run = "just lint-fix"
+[pre-commit.commands.lint]
+run = "just lint"
