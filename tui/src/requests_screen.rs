@@ -11,6 +11,12 @@ pub enum Message {
     UpdateTableColumnWidths(Box<RequestEntryRow>),
 }
 
+impl From<Message> for AppMessage {
+    fn from(message: Message) -> Self {
+        AppMessage::RequestsScreen(message)
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestEntryRow {
     request_id: String,

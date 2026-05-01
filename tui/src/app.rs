@@ -1,5 +1,5 @@
 use crate::{
-    requests_screen::{self, RequestsScreen},
+    requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
     waiting_screen::WaitingScreen,
 };
 use crossterm::event::{Event, EventStream};
@@ -13,10 +13,8 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::StreamExt;
 
-pub type RequestStore = Arc<Mutex<BTreeMap<proxy::RequestId, RequestEntry>>>;
-
 pub enum Message {
-    RequestsScreen(requests_screen::Message),
+    RequestsScreen(RequestsScreenMessage),
     StoreRequest(Box<(proxy::RequestId, proxy::Request)>),
     StoreResponse(Box<(proxy::RequestId, proxy::Response)>),
     Quit,
@@ -34,6 +32,8 @@ pub struct RequestEntry {
     pub request: proxy::Request,
     pub response: Option<proxy::Response>,
 }
+
+pub type RequestStore = Arc<Mutex<BTreeMap<proxy::RequestId, RequestEntry>>>;
 
 pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), proxy::Error>>>,
@@ -165,24 +165,12 @@ impl App {
 
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
-            Message::Quit => {
-                self.running = false;
-                self.abort_server_tx.take().map(|tx| tx.send(()));
-                None
-            }
+            Message::Quit => self.quit(),
             Message::StoreRequest(message) => {
-                if self.waiting_messages {
-                    self.screen = Box::new(RequestsScreen::new(self.request_store.clone()));
-                    self.waiting_messages = false;
-                }
                 let (request_id, request) = *message;
                 self.store_request(request_id, request)
             }
             Message::StoreResponse(message) => {
-                if self.waiting_messages {
-                    self.screen = Box::new(RequestsScreen::new(self.request_store.clone()));
-                    self.waiting_messages = false;
-                }
                 let (request_id, response) = *message;
                 self.store_response(request_id, response)
             }
@@ -190,11 +178,26 @@ impl App {
         }
     }
 
+    fn make_requests_screen(&mut self) -> Box<dyn Screen> {
+        Box::new(RequestsScreen::new(self.request_store.clone()))
+    }
+
+    fn quit(&mut self) -> Option<Message> {
+        self.running = false;
+        self.abort_server_tx.take().map(|tx| tx.send(()));
+        None
+    }
+
     fn store_request(
         &mut self,
         request_id: proxy::RequestId,
         request: proxy::Request,
     ) -> Option<Message> {
+        if self.waiting_messages {
+            self.screen = self.make_requests_screen();
+            self.waiting_messages = false;
+        }
+
         match self.request_store.lock() {
             Ok(mut store) => {
                 let request_entry = RequestEntry {
@@ -204,11 +207,12 @@ impl App {
                 };
                 store.insert(request_id, request_entry.clone());
 
-                Some(Message::RequestsScreen(
-                    requests_screen::Message::UpdateTableColumnWidths(Box::new(
+                Some(
+                    RequestsScreenMessage::UpdateTableColumnWidths(Box::new(
                         (&request_entry).into(),
-                    )),
-                ))
+                    ))
+                    .into(),
+                )
             }
             Err(_) => Some(Message::Quit),
         }
@@ -219,16 +223,22 @@ impl App {
         request_id: proxy::RequestId,
         response: proxy::Response,
     ) -> Option<Message> {
+        if self.waiting_messages {
+            self.screen = self.make_requests_screen();
+            self.waiting_messages = false;
+        }
+
         match self.request_store.lock() {
             Ok(mut store) => {
                 if let Some(request_entry) = store.get_mut(&request_id) {
                     request_entry.response = Some(response.clone());
 
-                    return Some(Message::RequestsScreen(
-                        requests_screen::Message::UpdateTableColumnWidths(Box::new(
+                    return Some(
+                        RequestsScreenMessage::UpdateTableColumnWidths(Box::new(
                             request_entry.deref().into(),
-                        )),
-                    ));
+                        ))
+                        .into(),
+                    );
                 }
                 None
             }
