@@ -39,8 +39,8 @@ lint-fix *ARGS:
     cargo clippy --fix --allow-dirty {{ ARGS }}
 
 ci:
-    cargo fmt --check
-    cargo clippy
+    just format --check
+    just lint
 
 test *ARGS:
     cargo test {{ ARGS }}
