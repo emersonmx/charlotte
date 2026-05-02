@@ -9,9 +9,12 @@ crossterm = { version = "0.29", features = ["event-stream"] }
 http-body-util = "0.1"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
+insta = { version = "1.47", features = ["yaml"] }
+proxy = { path = "proxy" }
 ratatui = "0.30"
 ratatui-textarea = "0.9"
 rcgen = { version = "0.14", features = ["x509-parser"] }
+rstest = "0.26.1"
 rustls = { version = "0.23", features = ["aws-lc-rs", "std"] }
 thiserror = "2"
 tokio = { version = "1.48", features = ["full"] }

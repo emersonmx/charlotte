@@ -4,11 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-thiserror.workspace = true
 http-body-util.workspace = true
-hyper.workspace = true
 hyper-util.workspace = true
+hyper.workspace = true
 rcgen.workspace = true
 rustls.workspace = true
-tokio.workspace = true
+thiserror.workspace = true
 tokio-rustls.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true

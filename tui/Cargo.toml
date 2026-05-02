@@ -7,12 +7,12 @@ edition = "2024"
 anyhow.workspace = true
 clap.workspace = true
 crossterm.workspace = true
-ratatui.workspace = true
-tokio.workspace = true
-tokio-stream.workspace = true
-proxy = { path = "../proxy" }
+proxy.workspace = true
 ratatui-textarea.workspace = true
+ratatui.workspace = true
+tokio-stream.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
-insta = { version = "1.47", features = ["yaml"] }
-rstest = "0.26.1"
+insta.workspace = true
+rstest.workspace = true
