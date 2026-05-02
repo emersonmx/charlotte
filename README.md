@@ -42,18 +42,6 @@ Build the project:
 just build
 ```
 
-### Generating a CA Certificate
-
-Before running the proxy, generate a CA certificate (used to intercept HTTPS):
-
-```sh
-just run --bin gencert
-```
-
-This will create a `certs/` directory with `ca.crt`, `ca.pem`, and `ca.key`.
-
-**Import `certs/ca.crt` into your browser or system as a trusted CA** to avoid HTTPS warnings.
-
 ### Running the Proxy UI
 
 Start the TUI proxy interface:
@@ -69,6 +57,15 @@ just run --bin tui -- --host 0.0.0.0 --port 8080
 ```
 
 Configure your browser or HTTP client to use the proxy address.
+
+### Certificates
+
+When you start Charlotte for the first time, a custom Certificate Authority (CA)
+is automatically generated in your system's default configuration directory, for
+example: `~/.config/charlotte/certs/ca.{crt,pem,key}`.
+
+To avoid HTTPS security warnings in browsers or clients, you need to add the
+`ca.crt` (or `ca.pem`) file as a trusted CA in your operating system or browser.
 
 ## Usage
 
