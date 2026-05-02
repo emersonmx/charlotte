@@ -255,3 +255,171 @@ pub fn is_quit_key_event(event: &Event) -> Option<Message> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use ratatui::{Terminal, backend::TestBackend};
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn terminal() -> Terminal<TestBackend> {
+        Terminal::new(TestBackend::new(80, 24)).unwrap()
+    }
+
+    #[fixture]
+    fn app() -> App {
+        App::new("localhost".to_string(), 8888)
+    }
+
+    #[rstest]
+    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut app: App) {
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn handle_store_request_message(mut app: App) {
+        let request_id = 1;
+        let request = proxy::Request {
+            method: "GET".to_string(),
+            url: "http://example.com".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+        let store_message = Message::StoreRequest(Box::new((request_id, request.clone())));
+        let expected_message =
+            Message::RequestsScreen(RequestsScreenMessage::UpdateTableState(Box::new(
+                (&RequestEntry {
+                    request_id,
+                    request: request.clone(),
+                    response: None,
+                })
+                    .into(),
+            )));
+
+        let message = app.update(store_message);
+
+        assert_eq!(message, Some(expected_message));
+    }
+
+    #[rstest]
+    fn handle_store_response_message(mut app: App) {
+        let request_id = 1;
+        let request = proxy::Request {
+            method: "GET".to_string(),
+            url: "http://example.com".to_string(),
+            headers: vec![],
+            body: vec![],
+        };
+        app.store_request(request_id, request.clone());
+        let response = proxy::Response {
+            status: 200,
+            headers: vec![],
+            body: vec![],
+        };
+        let store_message = Message::StoreResponse(Box::new((request_id, response.clone())));
+        let expected_message =
+            Message::RequestsScreen(RequestsScreenMessage::UpdateTableState(Box::new(
+                (&RequestEntry {
+                    request_id,
+                    request,
+                    response: Some(response),
+                })
+                    .into(),
+            )));
+
+        let message = app.update(store_message);
+
+        assert_eq!(message, Some(expected_message));
+    }
+
+    #[rstest]
+    fn handle_quit_message(mut app: App) {
+        let message = app.update(Message::Quit);
+
+        assert_eq!(message, None);
+        assert!(!app.running);
+    }
+
+    #[rstest]
+    fn handle_non_app_message(mut app: App) {
+        let non_app_message = Message::RequestsScreen(RequestsScreenMessage::SelectNextRow);
+
+        let message = app.update(non_app_message);
+
+        assert_eq!(message, None);
+    }
+
+    #[tokio::test]
+    #[rstest]
+    async fn handle_abort_app_with_proxy_error(mut app: App) {
+        let error = Ok(Err(proxy::Error::Proxy(
+            "Failed to bind to address".to_string(),
+        )));
+
+        let message = app.handle_abort_app(error).await;
+
+        assert_eq!(message, Some(Message::Quit));
+        assert_eq!(
+            app.exit_error.unwrap().to_string(),
+            "Failed to bind to address".to_string()
+        );
+    }
+
+    #[tokio::test]
+    #[rstest]
+    async fn handle_abort_app_with_recv_error(mut app: App) {
+        let (tx, rx) = oneshot::channel::<Result<(), proxy::Error>>();
+        drop(tx);
+        let error = rx.await.unwrap_err();
+
+        let message = app.handle_abort_app(Err(error)).await;
+
+        assert_eq!(message, Some(Message::Quit));
+        assert_eq!(
+            app.exit_error.unwrap().to_string(),
+            "Server was aborted unexpectedly".to_string()
+        );
+    }
+
+    #[rstest]
+    fn quit_on_q_key(mut app: App) {
+        let quit_event = Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('q'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        let message = app.screen.handle_event(quit_event);
+
+        assert_eq!(message, Some(Message::Quit));
+    }
+
+    #[rstest]
+    fn ignore_non_q_key(mut app: App) {
+        let non_quit_event = Event::Key(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Char('a'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        let message = app.screen.handle_event(non_quit_event);
+
+        assert_eq!(message, None);
+    }
+
+    #[rstest]
+    fn ignore_non_key_event(mut app: App) {
+        let non_key_event = Event::Mouse(crossterm::event::MouseEvent {
+            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        });
+
+        let message = app.screen.handle_event(non_key_event);
+
+        assert_eq!(message, None);
+    }
+}
