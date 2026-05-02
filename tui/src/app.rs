@@ -1,4 +1,5 @@
 use crate::{
+    config::Config,
     requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
     waiting_screen::WaitingScreen,
 };
@@ -6,9 +7,9 @@ use crossterm::event::{Event, EventStream};
 use ratatui::{DefaultTerminal, Frame};
 use std::{
     collections::BTreeMap,
+    io::Write,
     net::SocketAddr,
     ops::Deref,
-    path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::sync::{mpsc, oneshot};
@@ -41,8 +42,7 @@ pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), proxy::Error>>>,
     abort_server_tx: Option<oneshot::Sender<()>>,
     message_rx: Option<mpsc::Receiver<proxy::Message>>,
-    server_host: String,
-    server_port: u16,
+    config: Config,
     screen: Box<dyn Screen>,
     running: bool,
     exit_error: Option<anyhow::Error>,
@@ -53,14 +53,16 @@ pub struct App {
 impl App {
     const MESSAGE_CHANNEL_BUFFER_SIZE: usize = 128;
 
-    pub fn new(server_host: String, server_port: u16) -> Self {
-        let screen = Box::new(WaitingScreen::new(server_host.clone(), server_port));
+    pub fn new(config: Config) -> Self {
+        let screen = Box::new(WaitingScreen::new(
+            config.server_host.clone(),
+            config.server_port,
+        ));
         Self {
             abort_app_rx: None,
             abort_server_tx: None,
             message_rx: None,
-            server_host,
-            server_port,
+            config,
             screen,
             running: true,
             exit_error: None,
@@ -78,12 +80,8 @@ impl App {
         self.message_rx = Some(message_rx);
 
         let server_addr: SocketAddr =
-            format!("{}:{}", self.server_host, self.server_port).parse()?;
-        let certificate_store = proxy::CertificateStore::from_files(
-            Path::new("certs/ca.crt"),
-            Path::new("certs/ca.key"),
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to load certificate and key: {}", e))?;
+            format!("{}:{}", self.config.server_host, self.config.server_port).parse()?;
+        let certificate_store = self.load_certificate_store()?;
         let server = proxy::Server::new(server_addr, certificate_store, message_tx);
         let server_handle = tokio::spawn(async move {
             let result = server.run(abort_server_rx).await;
@@ -107,6 +105,40 @@ impl App {
         } else {
             Ok(())
         }
+    }
+
+    fn load_certificate_store(&self) -> anyhow::Result<proxy::CertificateStore> {
+        std::fs::create_dir_all(&self.config.certs_dir).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create certificates directory '{}': {}",
+                self.config.certs_dir.display(),
+                e
+            )
+        })?;
+
+        if !self.config.certs_dir.join("ca.crt").exists()
+            || !self.config.certs_dir.join("ca.key").exists()
+            || !self.config.certs_dir.join("ca.pem").exists()
+        {
+            let key_pair = gencert::generate_key_pair()
+                .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
+            let cert = gencert::generate_certificate(&key_pair)
+                .map_err(|e| anyhow::anyhow!("Failed to generate certificate: {}", e))?;
+
+            let certs_path = self.config.certs_dir.clone();
+            let mut cert_file_der = std::fs::File::create(certs_path.join("ca.crt"))?;
+            cert_file_der.write_all(cert.der())?;
+            let mut cert_file_pem = std::fs::File::create(certs_path.join("ca.pem"))?;
+            cert_file_pem.write_all(cert.pem().as_bytes())?;
+            let mut keypair_file = std::fs::File::create(certs_path.join("ca.key"))?;
+            keypair_file.write_all(key_pair.serialized_der())?;
+        }
+
+        proxy::CertificateStore::from_files(
+            &self.config.certs_dir.join("ca.crt"),
+            &self.config.certs_dir.join("ca.key"),
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to load certificate and key: {}", e))
     }
 
     fn draw(&mut self, frame: &mut Frame) {
@@ -285,8 +317,13 @@ mod tests {
     }
 
     #[fixture]
-    fn app() -> App {
-        App::new("localhost".to_string(), 8888)
+    fn config() -> Config {
+        Config::new("localhost".to_string(), 8888).unwrap()
+    }
+
+    #[fixture]
+    fn app(config: Config) -> App {
+        App::new(config)
     }
 
     #[rstest]
