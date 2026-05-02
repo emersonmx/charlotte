@@ -12,6 +12,7 @@ rustls.workspace = true
 thiserror.workspace = true
 tokio-rustls.workspace = true
 tokio.workspace = true
+webpki-roots.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
