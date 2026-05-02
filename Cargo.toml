@@ -11,6 +11,7 @@ hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 insta = { version = "1.47", features = ["yaml"] }
 proxy = { path = "proxy" }
+gencert = { path = "gencert" }
 ratatui = "0.30"
 ratatui-textarea = "0.9"
 rcgen = { version = "0.14", features = ["x509-parser"] }
