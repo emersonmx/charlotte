@@ -197,7 +197,7 @@ impl Screen for RequestsScreen {
         self.draw_scrollbar(frame);
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<AppMessage> {
+    fn handle_event(&self, event: Event) -> Option<AppMessage> {
         if let Some(message) = is_quit_key_event(&event) {
             return Some(message);
         }

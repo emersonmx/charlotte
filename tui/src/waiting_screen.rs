@@ -46,7 +46,7 @@ impl Screen for WaitingScreen {
         frame.render_widget(paragraph, centered_area);
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<AppMessage> {
+    fn handle_event(&self, event: Event) -> Option<AppMessage> {
         is_quit_key_event(&event)
     }
 

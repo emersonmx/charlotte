@@ -25,7 +25,7 @@ pub enum Message {
 
 pub trait Screen {
     fn draw(&mut self, frame: &mut Frame);
-    fn handle_event(&mut self, event: Event) -> Option<Message>;
+    fn handle_event(&self, event: Event) -> Option<Message>;
     fn update(&mut self, message: Message) -> Option<Message>;
 }
 
