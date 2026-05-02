@@ -47,13 +47,13 @@ just build
 Start the TUI proxy interface:
 
 ```sh
-just run --bin tui
+just run
 ```
 
 By default, the proxy listens on `127.0.0.1:8888`. You can change the host and port:
 
 ```sh
-just run --bin tui -- --host 0.0.0.0 --port 8080
+just run -- --host 0.0.0.0 --port 8080
 ```
 
 Configure your browser or HTTP client to use the proxy address.
