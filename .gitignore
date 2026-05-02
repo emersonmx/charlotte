@@ -22,8 +22,9 @@ Cargo.lock
 .env
 .envrc
 
-
 # Added by cargo
 
 /target
 /certs
+
+/tarpaulin-report.html

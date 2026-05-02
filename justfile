@@ -15,6 +15,11 @@ setup:
         cargo install --locked bacon
     fi
 
+    if ! command -v cargo-tarpaulin &> /dev/null; then
+        echo "tarpaulin not found, installing..."
+        cargo install --locked cargo-tarpaulin
+    fi
+
 build *ARGS:
     cargo build {{ ARGS }}
 
@@ -39,6 +44,9 @@ ci:
 
 test *ARGS:
     cargo test {{ ARGS }}
+
+coverage *ARGS:
+    cargo tarpaulin {{ ARGS }}
 
 review-snap *ARGS:
     cargo insta review {{ ARGS }}
