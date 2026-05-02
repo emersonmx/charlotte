@@ -73,6 +73,12 @@ mod tests {
     }
 
     #[rstest]
+    fn create_waiting_screen(screen: WaitingScreen) {
+        assert_eq!(screen.server_host, "localhost");
+        assert_eq!(screen.server_port, 8888);
+    }
+
+    #[rstest]
     fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut screen: WaitingScreen) {
         terminal.draw(|frame| screen.draw(frame)).unwrap();
         assert_snapshot!(terminal.backend());
