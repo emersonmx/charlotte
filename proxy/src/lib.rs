@@ -4,6 +4,7 @@ use hyper::{
     upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
+use rustls::pki_types::{DnsName, ServerName};
 use std::{
     path::Path,
     sync::{
@@ -14,6 +15,10 @@ use std::{
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
+};
+use tokio_rustls::{
+    TlsConnector,
+    rustls::{ClientConfig, RootCertStore},
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -209,6 +214,7 @@ pub struct Server {
     message_channel: mpsc::Sender<Message>,
     request_id_counter: Arc<AtomicUsize>,
     certificate_store: CertificateStore,
+    root_cert_store: RootCertStore,
 }
 
 impl Server {
@@ -218,11 +224,15 @@ impl Server {
         message_channel: mpsc::Sender<Message>,
     ) -> Self {
         let request_id_counter = Arc::new(AtomicUsize::new(1));
+        let root_cert_store =
+            RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
         Self {
             addr,
             message_channel,
             request_id_counter,
             certificate_store,
+            root_cert_store,
         }
     }
 
@@ -503,13 +513,98 @@ impl Server {
     async fn fetch(self: Arc<Self>, req: HyperRequest) -> Result<IncomingResponse, Error> {
         let (mut parts, body) = req.into_parts();
 
+        let is_tls = parts.uri.scheme_str() == Some("https");
+        let host = get_host(&parts.uri, &parts.headers)?;
         let addr = get_target_addr(&parts.uri, &parts.headers)?;
+
         let stream = TcpStream::connect(addr.clone())
             .await
             .map_err(|e| Error::Fetch {
                 message: format!("Failed to connect to target server at {addr}"),
                 source: e.into(),
             })?;
+
+        while parts.headers.get(hyper::header::HOST).is_some() {
+            parts.headers.remove(hyper::header::HOST);
+        }
+        let host_value = HeaderValue::from_str(&addr).map_err(|e| Error::Fetch {
+            message: "Could not parse the host header".to_string(),
+            source: e.into(),
+        })?;
+        let _ = parts.headers.insert(hyper::header::HOST, host_value);
+
+        let req = HyperRequest::from_parts(parts, body);
+
+        if is_tls {
+            self.fetch_tls(req, stream, host, addr).await
+        } else {
+            self.fetch_plain(req, stream).await
+        }
+    }
+
+    async fn fetch_tls(
+        self: Arc<Self>,
+        req: HyperRequest,
+        stream: TcpStream,
+        host: String,
+        addr: String,
+    ) -> Result<IncomingResponse, Error> {
+        let config = ClientConfig::builder()
+            .with_root_certificates(self.root_cert_store.clone())
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(config));
+        let dnsname = DnsName::try_from_str(&host).map_err(|e| Error::Fetch {
+            message: format!("Invalid DNS name for TLS connection: {host}"),
+            source: e.into(),
+        })?;
+
+        let stream = connector
+            .connect(ServerName::DnsName(dnsname).to_owned(), stream)
+            .await
+            .map_err(|e| Error::Fetch {
+                message: format!("Failed to establish TLS connection to target server at {addr}"),
+                source: e.into(),
+            })?;
+
+        let io = TokioIo::new(stream);
+
+        let (mut sender, conn) = ClientBuilder::new()
+            .preserve_header_case(true)
+            .title_case_headers(true)
+            .handshake(io)
+            .await
+            .map_err(|e| Error::Fetch {
+                message: "Failed to handshake with TLS target server".to_string(),
+                source: e.into(),
+            })?;
+
+        tokio::spawn(async move {
+            if let Err(err) = conn.await {
+                let _ = self
+                    .message_channel
+                    .send(Message::ErrorOccurred((
+                        None,
+                        Error::Fetch {
+                            message: "Connection error with TLS target server".to_string(),
+                            source: err.into(),
+                        }
+                        .into(),
+                    )))
+                    .await;
+            }
+        });
+
+        sender.send_request(req).await.map_err(|e| Error::Fetch {
+            message: "Failed to fetch response from TLS target server".to_string(),
+            source: e.into(),
+        })
+    }
+
+    async fn fetch_plain(
+        self: Arc<Self>,
+        req: HyperRequest,
+        stream: TcpStream,
+    ) -> Result<IncomingResponse, Error> {
         let io = TokioIo::new(stream);
 
         let (mut sender, conn) = ClientBuilder::new()
@@ -521,6 +616,7 @@ impl Server {
                 message: "Failed to establish connection to target server".to_string(),
                 source: e.into(),
             })?;
+
         tokio::spawn(async move {
             if let Err(err) = conn.await {
                 let _ = self
@@ -537,22 +633,10 @@ impl Server {
             }
         });
 
-        while parts.headers.get(hyper::header::HOST).is_some() {
-            parts.headers.remove(hyper::header::HOST);
-        }
-        let host_value = HeaderValue::from_str(&addr).map_err(|e| Error::Fetch {
-            message: "Could not parse the host header".to_string(),
-            source: e.into(),
-        })?;
-        let _ = parts.headers.insert(hyper::header::HOST, host_value);
-
-        let req = HyperRequest::from_parts(parts, body);
-        let res = sender.send_request(req).await.map_err(|e| Error::Fetch {
+        sender.send_request(req).await.map_err(|e| Error::Fetch {
             message: "Failed to fetch response from target server".to_string(),
             source: e.into(),
-        })?;
-
-        Ok(res)
+        })
     }
 }
 
