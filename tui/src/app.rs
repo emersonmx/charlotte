@@ -8,6 +8,7 @@ use std::{
     collections::BTreeMap,
     net::SocketAddr,
     ops::Deref,
+    path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::sync::{mpsc, oneshot};
@@ -78,7 +79,12 @@ impl App {
 
         let server_addr: SocketAddr =
             format!("{}:{}", self.server_host, self.server_port).parse()?;
-        let server = proxy::Server::new(server_addr, message_tx);
+        let certificate_store = proxy::CertificateStore::from_files(
+            Path::new("certs/ca.crt"),
+            Path::new("certs/ca.key"),
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to load certificate and key: {}", e))?;
+        let server = proxy::Server::new(server_addr, certificate_store, message_tx);
         let server_handle = tokio::spawn(async move {
             let result = server.run(abort_server_rx).await;
             let _ = abort_app_tx.send(result);
@@ -356,16 +362,14 @@ mod tests {
     #[tokio::test]
     #[rstest]
     async fn handle_abort_app_with_proxy_error(mut app: App) {
-        let error = Ok(Err(proxy::Error::Proxy(
-            "Failed to bind to address".to_string(),
-        )));
+        let error = Ok(Err(proxy::Error::AcceptConnection("TEST ERROR".into())));
 
         let message = app.handle_abort_app(error).await;
 
         assert_eq!(message, Some(Message::Quit));
         assert_eq!(
             app.exit_error.unwrap().to_string(),
-            "Failed to bind to address".to_string()
+            "Failed to accept connection: TEST ERROR".to_string()
         );
     }
 

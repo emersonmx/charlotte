@@ -4,15 +4,19 @@ use hyper::{
     upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
 };
 
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 type ClientBuilder = hyper::client::conn::http1::Builder;
 type ServerBuilder = hyper::server::conn::http1::Builder;
 type IncomingRequest = hyper::Request<hyper::body::Incoming>;
@@ -22,27 +26,14 @@ type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
-    #[error("{0}")]
-    Proxy(String),
-
     #[error("Failed to listen on address: {addr}, error: {source}")]
     BindAddress {
         addr: std::net::SocketAddr,
         #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-    #[error("Failed to send message: {message:?}, error: {source}")]
-    Channel {
-        message: Box<Message>,
-        #[source]
-        source: Box<dyn std::error::Error + Send + Sync>,
+        source: BoxError,
     },
     #[error("Failed to accept connection: {0}")]
-    AcceptConnection(#[source] Box<dyn std::error::Error + Send + Sync>),
+    AcceptConnection(#[source] BoxError),
     #[error("{message} (uri: {uri}, headers: {headers:?})")]
     TargetAddress {
         message: String,
@@ -51,10 +42,31 @@ pub enum Error {
     },
     #[error("Failed to fix relative URI: {0:?}")]
     FixRelativeUri(Box<RequestContextError>),
+
+    #[error("Failed to establish connection to target server: {message}, error: {source}")]
+    TargetConnection {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
+    #[error("Failed to fetch from target server: {message}, error: {source}")]
+    Fetch {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
+
     #[error("Failed to read request body: {0:?}")]
     RequestBodyRead(Box<RequestContextError>),
     #[error("Failed to read response body: {0:?}")]
     ResponseBodyRead(Box<ResponseContextError>),
+
+    #[error("Failed to send message: {message:?}, error: {source}")]
+    Channel {
+        message: Box<Message>,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -136,19 +148,81 @@ pub enum Message {
     ErrorOccurred((Option<RequestId>, Box<Error>)),
 }
 
+pub struct CertificateStore {
+    ca_cert_bytes: Vec<u8>,
+    ca_key_bytes: Vec<u8>,
+}
+
+impl CertificateStore {
+    pub fn new(ca_cert_bytes: &[u8], ca_key_bytes: &[u8]) -> Result<Self, BoxError> {
+        Ok(Self {
+            ca_cert_bytes: ca_cert_bytes.to_vec(),
+            ca_key_bytes: ca_key_bytes.to_vec(),
+        })
+    }
+
+    pub fn from_files(ca_cert_path: &Path, ca_key_path: &Path) -> Result<Self, BoxError> {
+        let ca_cert_bytes = std::fs::read(ca_cert_path).map_err(|e| {
+            format!(
+                "Failed to read CA certificate from {:?}: {e}",
+                &ca_cert_path
+            )
+        })?;
+        let ca_key_bytes = std::fs::read(ca_key_path)
+            .map_err(|e| format!("Failed to read CA key from {:?}: {e}", &ca_key_path))?;
+        Self::new(&ca_cert_bytes, &ca_key_bytes)
+    }
+
+    pub fn generate_cert(
+        &self,
+        domain: &str,
+    ) -> Result<(rcgen::Certificate, rcgen::KeyPair), BoxError> {
+        let issuer = self.get_issuer()?;
+
+        let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
+            .map_err(|e| format!("Failed to create certificate params: {e}"))?;
+        params.is_ca = rcgen::IsCa::NoCa;
+        let domain_keypair =
+            rcgen::KeyPair::generate().map_err(|e| format!("Failed to generate key pair: {e}"))?;
+        let domain_cert = params
+            .signed_by(&domain_keypair, &issuer)
+            .map_err(|e| format!("Failed to sign certificate: {e}"))?;
+
+        Ok((domain_cert, domain_keypair))
+    }
+
+    fn get_issuer(&self) -> Result<rcgen::Issuer<'_, rcgen::KeyPair>, BoxError> {
+        let ca_cert_der = rustls::pki_types::CertificateDer::from(self.ca_cert_bytes.clone());
+        let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(self.ca_key_bytes.clone());
+
+        let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
+            .map_err(|e| format!("Failed to parse CA key: {e}"))?;
+        let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
+            .map_err(|e| format!("Failed to create issuer from CA cert: {e}"))?;
+
+        Ok(issuer)
+    }
+}
+
 pub struct Server {
     addr: std::net::SocketAddr,
     message_channel: mpsc::Sender<Message>,
     request_id_counter: Arc<AtomicUsize>,
+    certificate_store: CertificateStore,
 }
 
 impl Server {
-    pub fn new(addr: std::net::SocketAddr, message_channel: mpsc::Sender<Message>) -> Self {
+    pub fn new(
+        addr: std::net::SocketAddr,
+        certificate_store: CertificateStore,
+        message_channel: mpsc::Sender<Message>,
+    ) -> Self {
         let request_id_counter = Arc::new(AtomicUsize::new(1));
         Self {
             addr,
             message_channel,
             request_id_counter,
+            certificate_store,
         }
     }
 
@@ -204,14 +278,21 @@ impl Server {
                             .await
                         {
                             let _ = message_channel
-                                .send(Message::ErrorOccurred((None, Box::new(err.into()))))
+                                .send(Message::ErrorOccurred((
+                                    None,
+                                    Error::TargetConnection {
+                                        message: "Error handling client connection".to_string(),
+                                        source: err.into()
+                                    }
+                                    .into(),
+                                )))
                                 .await;
                         }
 
                         let _ = message_channel
                             .send(Message::ClientDisconnected(socket_addr))
                             .await;
-                        });
+                    });
                 }
                 _ = &mut abort_channel => break
             }
@@ -278,7 +359,12 @@ impl Server {
                         let _ = message_channel
                             .send(Message::ErrorOccurred((
                                 Some(request_id),
-                                Box::new(e.into()),
+                                Error::TargetConnection {
+                                    message: "Failed to upgrade connection for CONNECT request"
+                                        .to_string(),
+                                    source: e.into(),
+                                }
+                                .into(),
                             )))
                             .await;
                     }
@@ -311,34 +397,33 @@ impl Server {
     ) -> Result<(), Error> {
         let request_id = self.request_id_counter.load(Ordering::Relaxed);
 
-        let ca_cert_bytes = std::fs::read("certs/ca.crt")?;
-        let ca_key_bytes = std::fs::read("certs/ca.key")?;
-        let ca_cert_der = rustls::pki_types::CertificateDer::from(ca_cert_bytes);
-        let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(ca_key_bytes);
-
-        let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
-            .map_err(|e| Error::Proxy(format!("Failed to parse CA key: {e}")))?;
-        let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
-            .map_err(|e| Error::Proxy(format!("Failed to create issuer from CA cert: {e}")))?;
-
         let domain = addr.split(':').next().unwrap_or("localhost");
-        let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
-            .map_err(|e| Error::Proxy(format!("Failed to create certificate params: {e}")))?;
-        params.is_ca = rcgen::IsCa::NoCa;
-        let domain_keypair = rcgen::KeyPair::generate()
-            .map_err(|e| Error::Proxy(format!("Failed to generate key pair: {e}")))?;
-        let domain_cert = params
-            .signed_by(&domain_keypair, &issuer)
-            .map_err(|e| Error::Proxy(format!("Failed to sign certificate: {e}")))?;
+        let (domain_cert, domain_keypair) =
+            self.certificate_store
+                .generate_cert(domain)
+                .map_err(|e| Error::TargetConnection {
+                    message: format!("Failed to generate certificate for {domain}: {e}"),
+                    source: e,
+                })?;
 
         let config = rustls::ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(vec![domain_cert.into()], domain_keypair.into())
-            .map_err(|e| Error::Proxy(format!("Failed to create TLS config: {e}")))?;
+            .map_err(|e| Error::TargetConnection {
+                message: format!("Failed to create TLS config: {e}"),
+                source: e.into(),
+            })?;
 
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
 
-        let tls_stream = acceptor.accept(TokioIo::new(upgraded)).await?;
+        let tls_stream =
+            acceptor
+                .accept(TokioIo::new(upgraded))
+                .await
+                .map_err(|e| Error::TargetConnection {
+                    message: "Failed to establish TLS connection with client".to_string(),
+                    source: e.into(),
+                })?;
 
         let handler = {
             let self_clone = self.clone();
@@ -360,7 +445,11 @@ impl Server {
                     .message_channel
                     .send(Message::ErrorOccurred((
                         Some(request_id),
-                        Box::new(err.into()),
+                        Error::TargetConnection {
+                            message: "Error handling upgraded TLS connection".to_string(),
+                            source: err.into(),
+                        }
+                        .into(),
                     )))
                     .await;
             }
@@ -415,19 +504,35 @@ impl Server {
         let (mut parts, body) = req.into_parts();
 
         let addr = get_target_addr(&parts.uri, &parts.headers)?;
-        let stream = TcpStream::connect(addr.clone()).await?;
+        let stream = TcpStream::connect(addr.clone())
+            .await
+            .map_err(|e| Error::Fetch {
+                message: format!("Failed to connect to target server at {addr}"),
+                source: e.into(),
+            })?;
         let io = TokioIo::new(stream);
 
         let (mut sender, conn) = ClientBuilder::new()
             .preserve_header_case(true)
             .title_case_headers(true)
             .handshake(io)
-            .await?;
+            .await
+            .map_err(|e| Error::Fetch {
+                message: "Failed to establish connection to target server".to_string(),
+                source: e.into(),
+            })?;
         tokio::spawn(async move {
             if let Err(err) = conn.await {
                 let _ = self
                     .message_channel
-                    .send(Message::ErrorOccurred((None, Box::new(err.into()))))
+                    .send(Message::ErrorOccurred((
+                        None,
+                        Error::Fetch {
+                            message: "Connection error with target server".to_string(),
+                            source: err.into(),
+                        }
+                        .into(),
+                    )))
                     .await;
             }
         });
@@ -435,12 +540,17 @@ impl Server {
         while parts.headers.get(hyper::header::HOST).is_some() {
             parts.headers.remove(hyper::header::HOST);
         }
-        let host_value = HeaderValue::from_str(&addr)
-            .map_err(|_| Error::Proxy("Could not parse the host header".to_string()))?;
+        let host_value = HeaderValue::from_str(&addr).map_err(|e| Error::Fetch {
+            message: "Could not parse the host header".to_string(),
+            source: e.into(),
+        })?;
         let _ = parts.headers.insert(hyper::header::HOST, host_value);
 
         let req = HyperRequest::from_parts(parts, body);
-        let res = sender.send_request(req).await?;
+        let res = sender.send_request(req).await.map_err(|e| Error::Fetch {
+            message: "Failed to fetch response from target server".to_string(),
+            source: e.into(),
+        })?;
 
         Ok(res)
     }
