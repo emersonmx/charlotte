@@ -100,11 +100,7 @@ impl App {
 
         server_handle.await?;
 
-        if let Some(error) = self.exit_error.take() {
-            Err(error)
-        } else {
-            Ok(())
-        }
+        self.exit_error.take().map_or(Ok(()), Err)
     }
 
     fn load_certificate_store(&self) -> anyhow::Result<proxy::CertificateStore> {
