@@ -33,10 +33,16 @@ pub enum Error {
     BindAddress {
         addr: std::net::SocketAddr,
         #[source]
-        source: std::io::Error,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+    #[error("Failed to send message: {message:?}, error: {source}")]
+    Channel {
+        message: Box<Message>,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
     #[error("Failed to accept connection: {0}")]
-    AcceptConnection(#[source] std::io::Error),
+    AcceptConnection(#[source] Box<dyn std::error::Error + Send + Sync>),
     #[error("{message} (uri: {uri}, headers: {headers:?})")]
     TargetAddress {
         message: String,
@@ -127,7 +133,7 @@ pub enum Message {
     ClientDisconnected(std::net::SocketAddr),
     RequestSent((RequestId, Request)),
     ResponseReceived((RequestId, Response)),
-    ErrorOccurred((Option<RequestId>, Error)),
+    ErrorOccurred((Option<RequestId>, Box<Error>)),
 }
 
 pub struct Server {
@@ -152,20 +158,30 @@ impl Server {
             .await
             .map_err(|e| Error::BindAddress {
                 addr: self_arc.addr,
-                source: e,
+                source: e.into(),
             })?;
 
-        let _ = self_arc.message_channel.send(Message::ServerStarted).await;
+        self_arc
+            .message_channel
+            .send(Message::ServerStarted)
+            .await
+            .map_err(|e| Error::Channel {
+                message: Message::ServerStarted.into(),
+                source: e.into(),
+            })?;
 
         loop {
             tokio::select! {
                 accept_result = listener.accept() => {
                     let (socket, socket_addr) = accept_result
-                        .map_err(Error::AcceptConnection)?;
+                        .map_err(|e| Error::AcceptConnection(e.into()))?;
 
-                    let _ = self_arc.message_channel
+                    self_arc.message_channel
                         .send(Message::ClientConnected(socket_addr))
-                        .await;
+                        .await.map_err(|e| Error::Channel {
+                            message: Message::ClientConnected(socket_addr).into(),
+                            source: e.into(),
+                        })?;
 
                     let handler = {
                         let self_clone = self_arc.clone();
@@ -188,7 +204,7 @@ impl Server {
                             .await
                         {
                             let _ = message_channel
-                                .send(Message::ErrorOccurred((None, err.into())))
+                                .send(Message::ErrorOccurred((None, Box::new(err.into()))))
                                 .await;
                         }
 
@@ -201,7 +217,14 @@ impl Server {
             }
         }
 
-        let _ = self_arc.message_channel.send(Message::ServerStopped).await;
+        self_arc
+            .message_channel
+            .send(Message::ServerStopped)
+            .await
+            .map_err(|e| Error::Channel {
+                message: Message::ServerStopped.into(),
+                source: e.into(),
+            })?;
 
         Ok(())
     }
@@ -247,13 +270,16 @@ impl Server {
                             .await
                         {
                             let _ = message_channel
-                                .send(Message::ErrorOccurred((Some(request_id), e)))
+                                .send(Message::ErrorOccurred((Some(request_id), e.into())))
                                 .await;
                         }
                     }
                     Err(e) => {
                         let _ = message_channel
-                            .send(Message::ErrorOccurred((Some(request_id), e.into())))
+                            .send(Message::ErrorOccurred((
+                                Some(request_id),
+                                Box::new(e.into()),
+                            )))
                             .await;
                     }
                 }
@@ -332,7 +358,10 @@ impl Server {
             {
                 let _ = self
                     .message_channel
-                    .send(Message::ErrorOccurred((Some(request_id), err.into())))
+                    .send(Message::ErrorOccurred((
+                        Some(request_id),
+                        Box::new(err.into()),
+                    )))
                     .await;
             }
 
@@ -398,7 +427,7 @@ impl Server {
             if let Err(err) = conn.await {
                 let _ = self
                     .message_channel
-                    .send(Message::ErrorOccurred((None, err.into())))
+                    .send(Message::ErrorOccurred((None, Box::new(err.into()))))
                     .await;
             }
         });
@@ -491,14 +520,17 @@ where
         .collect()
         .await
         .map_err(|e| {
-            Error::RequestBodyRead(Box::new(RequestContextError {
-                method: parts.method.to_string(),
-                uri: parts.uri.to_string(),
-                version: format!("{:?}", parts.version),
-                headers: headers_to_vec(&parts.headers),
-                extensions: format!("{:?}", parts.extensions),
-                message: format!("{e:?}"),
-            }))
+            Error::RequestBodyRead(
+                RequestContextError {
+                    method: parts.method.to_string(),
+                    uri: parts.uri.to_string(),
+                    version: format!("{:?}", parts.version),
+                    headers: headers_to_vec(&parts.headers),
+                    extensions: format!("{:?}", parts.extensions),
+                    message: format!("{e:?}"),
+                }
+                .into(),
+            )
         })?
         .to_bytes();
     Ok((parts, body))
@@ -524,13 +556,16 @@ where
         .collect()
         .await
         .map_err(|e| {
-            Error::ResponseBodyRead(Box::new(ResponseContextError {
-                status: parts.status.as_u16(),
-                version: format!("{:?}", parts.version),
-                headers: headers_to_vec(&parts.headers),
-                extensions: format!("{:?}", parts.extensions),
-                message: format!("{e:?}"),
-            }))
+            Error::ResponseBodyRead(
+                ResponseContextError {
+                    status: parts.status.as_u16(),
+                    version: format!("{:?}", parts.version),
+                    headers: headers_to_vec(&parts.headers),
+                    extensions: format!("{:?}", parts.extensions),
+                    message: format!("{e:?}"),
+                }
+                .into(),
+            )
         })?
         .to_bytes();
     Ok((parts, body))
@@ -564,26 +599,32 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
         && let Some(host) = parts.headers.get(hyper::header::HOST)
     {
         let host = host.to_str().map_err(|_| {
-            Error::FixRelativeUri(Box::new(RequestContextError {
-                method: parts.method.to_string(),
-                uri: parts.uri.to_string(),
-                version: format!("{:?}", parts.version),
-                headers: headers_to_vec(&parts.headers),
-                extensions: format!("{:?}", parts.extensions),
-                message: "Invalid HOST header format (not UTF-8)".to_string(),
-            }))
+            Error::FixRelativeUri(
+                RequestContextError {
+                    method: parts.method.to_string(),
+                    uri: parts.uri.to_string(),
+                    version: format!("{:?}", parts.version),
+                    headers: headers_to_vec(&parts.headers),
+                    extensions: format!("{:?}", parts.extensions),
+                    message: "Invalid HOST header format (not UTF-8)".to_string(),
+                }
+                .into(),
+            )
         })?;
         let scheme = if is_tls { "https" } else { "http" };
         let new_uri = format!("{}://{}{}", scheme, host, parts.uri);
         let uri = new_uri.parse::<Uri>().map_err(|e| {
-            Error::FixRelativeUri(Box::new(RequestContextError {
-                method: parts.method.to_string(),
-                uri: parts.uri.to_string(),
-                version: format!("{:?}", parts.version),
-                headers: headers_to_vec(&parts.headers),
-                extensions: format!("{:?}", parts.extensions),
-                message: format!("Failed to parse fixed URI: {e}"),
-            }))
+            Error::FixRelativeUri(
+                RequestContextError {
+                    method: parts.method.to_string(),
+                    uri: parts.uri.to_string(),
+                    version: format!("{:?}", parts.version),
+                    headers: headers_to_vec(&parts.headers),
+                    extensions: format!("{:?}", parts.extensions),
+                    message: format!("Failed to parse fixed URI: {e}"),
+                }
+                .into(),
+            )
         })?;
         parts.uri = uri;
     }
