@@ -5,10 +5,10 @@ use crate::{
 };
 use crossterm::event::{Event, EventStream};
 use proxy::{
-    gencert::{generate_certificate, generate_key_pair},
+    certs::{CertificateStore, generate_certificate, generate_key_pair},
     server::{
-        CertificateStore, Error as ServerError, Message as ProxyMessage, Request, RequestId,
-        Response, Server as ProxyServer,
+        Error as ServerError, Message as ProxyMessage, Request, RequestId, Response,
+        Server as ProxyServer,
     },
 };
 use ratatui::{DefaultTerminal, Frame};

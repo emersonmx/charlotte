@@ -1,2 +1,2 @@
-pub mod gencert;
+pub mod certs;
 pub mod server;

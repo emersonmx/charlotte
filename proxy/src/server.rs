@@ -1,12 +1,14 @@
+use crate::certs::CertificateStore;
 use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
 use hyper::{
-    HeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn, upgrade::Upgraded,
+    HeaderMap as HyperHeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn,
+    upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{DnsName, ServerName};
 use std::{
+    collections::HashMap,
     fmt::Display,
-    path::Path,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -266,62 +268,6 @@ pub enum Message {
     RequestSent((RequestId, Request)),
     ResponseReceived((RequestId, Response)),
     ErrorOccurred((Option<RequestId>, Box<Error>)),
-}
-
-pub struct CertificateStore {
-    ca_cert_bytes: Vec<u8>,
-    ca_key_bytes: Vec<u8>,
-}
-
-impl CertificateStore {
-    pub fn new(ca_cert_bytes: &[u8], ca_key_bytes: &[u8]) -> Result<Self, BoxError> {
-        Ok(Self {
-            ca_cert_bytes: ca_cert_bytes.to_vec(),
-            ca_key_bytes: ca_key_bytes.to_vec(),
-        })
-    }
-
-    pub fn from_files(ca_cert_path: &Path, ca_key_path: &Path) -> Result<Self, BoxError> {
-        let ca_cert_bytes = std::fs::read(ca_cert_path).map_err(|e| {
-            format!(
-                "Failed to read CA certificate from {:?}: {e}",
-                &ca_cert_path
-            )
-        })?;
-        let ca_key_bytes = std::fs::read(ca_key_path)
-            .map_err(|e| format!("Failed to read CA key from {:?}: {e}", &ca_key_path))?;
-        Self::new(&ca_cert_bytes, &ca_key_bytes)
-    }
-
-    pub fn generate_cert(
-        &self,
-        domain: &str,
-    ) -> Result<(rcgen::Certificate, rcgen::KeyPair), BoxError> {
-        let issuer = self.get_issuer()?;
-
-        let mut params = rcgen::CertificateParams::new(vec![domain.to_string()])
-            .map_err(|e| format!("Failed to create certificate params: {e}"))?;
-        params.is_ca = rcgen::IsCa::NoCa;
-        let domain_keypair =
-            rcgen::KeyPair::generate().map_err(|e| format!("Failed to generate key pair: {e}"))?;
-        let domain_cert = params
-            .signed_by(&domain_keypair, &issuer)
-            .map_err(|e| format!("Failed to sign certificate: {e}"))?;
-
-        Ok((domain_cert, domain_keypair))
-    }
-
-    fn get_issuer(&self) -> Result<rcgen::Issuer<'_, rcgen::KeyPair>, BoxError> {
-        let ca_cert_der = rustls::pki_types::CertificateDer::from(self.ca_cert_bytes.clone());
-        let ca_key_der = rustls::pki_types::PrivatePkcs8KeyDer::from(self.ca_key_bytes.clone());
-
-        let ca_key_pair = rcgen::KeyPair::try_from(&ca_key_der)
-            .map_err(|e| format!("Failed to parse CA key: {e}"))?;
-        let issuer = rcgen::Issuer::from_ca_cert_der(&ca_cert_der, ca_key_pair)
-            .map_err(|e| format!("Failed to create issuer from CA cert: {e}"))?;
-
-        Ok(issuer)
-    }
 }
 
 pub struct Server {
@@ -764,13 +710,13 @@ impl Server {
     }
 }
 
-fn get_target_addr(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+fn get_target_addr(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
     let host = get_host(uri, headers)?;
     let port = get_port(uri, headers)?;
     Ok(format!("{host}:{port}"))
 }
 
-fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+fn get_host(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
     if let Some(host) = uri.host() {
         Ok(host.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
@@ -793,7 +739,7 @@ fn get_host(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
     }
 }
 
-fn get_port(uri: &Uri, headers: &HeaderMap) -> Result<String, Error> {
+fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
     let default_port = match uri.scheme_str() {
         Some("https") => 443_u16,
         _ => 80_u16,
@@ -854,7 +800,7 @@ where
     Ok((parts, body))
 }
 
-fn clean_request_headers(headers: &mut HeaderMap) {
+fn clean_request_headers(headers: &mut HyperHeaderMap) {
     headers.remove(hyper::header::CONNECTION);
     headers.remove("proxy-connection");
     headers.remove("keep-alive");
@@ -889,7 +835,7 @@ where
     Ok((parts, body))
 }
 
-fn clean_response_headers(headers: &mut HeaderMap) {
+fn clean_response_headers(headers: &mut HyperHeaderMap) {
     headers.remove(hyper::header::CONNECTION);
     headers.remove(hyper::header::TRANSFER_ENCODING);
 }
@@ -898,7 +844,7 @@ fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
     Full::new(body).map_err(|e| match e {}).boxed()
 }
 
-fn headers_to_vec(headers: &HeaderMap) -> Vec<(String, String)> {
+fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<(String, String)> {
     headers
         .iter()
         .map(|(k, v)| {
