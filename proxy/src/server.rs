@@ -1,7 +1,7 @@
 use crate::{
     certs::CertificateStore,
     http::{
-        self, BytesExt, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest,
+        self, BytesExt, ClientBuilder, Header, HyperRequest, HyperResponse, IncomingRequest,
         IncomingResponse, Request, RequestContextError, Response, ServerBuilder, headers_to_vec,
     },
 };
@@ -44,7 +44,7 @@ pub enum Error {
     TargetAddress {
         message: String,
         uri: String,
-        headers: Vec<(String, String)>,
+        headers: Vec<Header>,
     },
     #[error("Failed to fix relative URI: {0:?}")]
     FixRelativeUri(Box<RequestContextError>),

@@ -33,7 +33,7 @@ pub struct RequestContextError {
     pub method: Method,
     pub uri: String,
     pub version: String,
-    pub headers: Vec<(String, String)>,
+    pub headers: Vec<Header>,
     pub extensions: String,
     pub message: String,
 }
@@ -42,7 +42,7 @@ pub struct RequestContextError {
 pub struct ResponseContextError {
     pub status: u16,
     pub version: String,
-    pub headers: Vec<(String, String)>,
+    pub headers: Vec<Header>,
     pub extensions: String,
     pub message: String,
 }
@@ -150,10 +150,23 @@ impl From<&str> for Url {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct Header(String, String);
+
+impl Header {
+    pub fn key(&self) -> &str {
+        &self.0
+    }
+
+    pub fn value(&self) -> &str {
+        &self.1
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
     pub method: Method,
     pub url: Url,
-    pub headers: Vec<(String, String)>,
+    pub headers: Vec<Header>,
     pub body: Vec<u8>,
 }
 
@@ -222,7 +235,7 @@ impl Request {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Response {
     pub status: u16,
-    pub headers: Vec<(String, String)>,
+    pub headers: Vec<Header>,
     pub body: Vec<u8>,
 }
 
@@ -285,11 +298,11 @@ impl Response {
     }
 }
 
-pub(crate) fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<(String, String)> {
+pub(crate) fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<Header> {
     headers
         .iter()
         .map(|(k, v)| {
-            (
+            Header(
                 k.as_str().to_string(),
                 v.to_str()
                     .unwrap_or("<invalid UTF-8 in header value>")
