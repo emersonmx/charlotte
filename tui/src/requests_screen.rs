@@ -40,7 +40,7 @@ impl From<&RequestEntry> for RequestEntryRow {
 
         RequestEntryRow {
             request_id: entry.request_id.to_string(),
-            method: entry.request.method.clone(),
+            method: entry.request.method.to_string(),
             url: entry.request.url.clone(),
             body: String::from_utf8_lossy(&entry.request.body).to_string(),
             status,

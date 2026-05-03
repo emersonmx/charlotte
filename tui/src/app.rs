@@ -303,6 +303,7 @@ pub fn is_quit_key_event(event: &Event) -> Option<Message> {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
+    use proxy::server::Method;
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
 
@@ -332,7 +333,7 @@ mod tests {
     fn handle_store_request_message(mut app: App) {
         let request_id = RequestId::new(1);
         let request = Request {
-            method: "GET".to_string(),
+            method: Method::Get,
             url: "http://example.com".to_string(),
             headers: vec![],
             body: vec![],
@@ -357,7 +358,7 @@ mod tests {
     fn handle_store_response_message(mut app: App) {
         let request_id = RequestId::new(1);
         let request = Request {
-            method: "GET".to_string(),
+            method: Method::Get,
             url: "http://example.com".to_string(),
             headers: vec![],
             body: vec![],

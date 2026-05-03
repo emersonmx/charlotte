@@ -1,7 +1,6 @@
 use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
 use hyper::{
-    HeaderMap, Method, Uri, body::Bytes, header::HeaderValue, service::service_fn,
-    upgrade::Upgraded,
+    HeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn, upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{DnsName, ServerName};
@@ -77,7 +76,7 @@ pub enum Error {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestContextError {
-    pub method: String,
+    pub method: Method,
     pub uri: String,
     pub version: String,
     pub headers: Vec<(String, String)>,
@@ -109,9 +108,57 @@ impl Display for RequestId {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub enum Method {
+    #[default]
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    Head,
+    Options,
+    Connect,
+    Trace,
+}
+
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let method_str = match self {
+            Method::Get => "GET",
+            Method::Post => "POST",
+            Method::Put => "PUT",
+            Method::Patch => "PATCH",
+            Method::Delete => "DELETE",
+            Method::Head => "HEAD",
+            Method::Options => "OPTIONS",
+            Method::Connect => "CONNECT",
+            Method::Trace => "TRACE",
+        };
+        write!(f, "{method_str}")
+    }
+}
+
+impl From<hyper::Method> for Method {
+    fn from(method: hyper::Method) -> Self {
+        match method {
+            hyper::Method::GET => Method::Get,
+            hyper::Method::POST => Method::Post,
+            hyper::Method::PUT => Method::Put,
+            hyper::Method::PATCH => Method::Patch,
+            hyper::Method::DELETE => Method::Delete,
+            hyper::Method::HEAD => Method::Head,
+            hyper::Method::OPTIONS => Method::Options,
+            hyper::Method::CONNECT => Method::Connect,
+            hyper::Method::TRACE => Method::Trace,
+            _ => Method::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
-    pub method: String,
+    pub method: Method,
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
@@ -125,7 +172,7 @@ impl Request {
         let body = body.collect().await?.to_bytes().to_vec();
 
         Ok(Self {
-            method: parts.method.to_string(),
+            method: parts.method.clone().into(),
             url: parts.uri.to_string(),
             headers: headers_to_vec(&parts.headers),
             body,
@@ -340,7 +387,7 @@ impl Server {
         client_addr: std::net::SocketAddr,
     ) -> Result<HyperResponse, Error> {
         match req.method() {
-            &Method::CONNECT => self.handle_connect(req, client_addr).await,
+            &hyper::Method::CONNECT => self.handle_connect(req, client_addr).await,
             _ => self.handle_regular(req, client_addr, false).await,
         }
     }
@@ -739,7 +786,7 @@ where
         .map_err(|e| {
             Error::RequestBodyRead(
                 RequestContextError {
-                    method: parts.method.to_string(),
+                    method: parts.method.clone().into(),
                     uri: parts.uri.to_string(),
                     version: format!("{:?}", parts.version),
                     headers: headers_to_vec(&parts.headers),
@@ -818,7 +865,7 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
         let host = host.to_str().map_err(|_| {
             Error::FixRelativeUri(
                 RequestContextError {
-                    method: parts.method.to_string(),
+                    method: parts.method.clone().into(),
                     uri: parts.uri.to_string(),
                     version: format!("{:?}", parts.version),
                     headers: headers_to_vec(&parts.headers),
@@ -833,7 +880,7 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
         let uri = new_uri.parse::<Uri>().map_err(|e| {
             Error::FixRelativeUri(
                 RequestContextError {
-                    method: parts.method.to_string(),
+                    method: parts.method.clone().into(),
                     uri: parts.uri.to_string(),
                     version: format!("{:?}", parts.version),
                     headers: headers_to_vec(&parts.headers),
