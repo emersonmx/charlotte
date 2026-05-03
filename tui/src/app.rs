@@ -435,7 +435,7 @@ mod tests {
     }
 
     #[rstest]
-    fn quit_on_q_key(mut app: App) {
+    fn quit_on_q_key(app: App) {
         let quit_event = Event::Key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('q'),
             crossterm::event::KeyModifiers::NONE,
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[rstest]
-    fn ignore_non_q_key(mut app: App) {
+    fn ignore_non_q_key(app: App) {
         let non_quit_event = Event::Key(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Char('a'),
             crossterm::event::KeyModifiers::NONE,
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[rstest]
-    fn ignore_non_key_event(mut app: App) {
+    fn ignore_non_key_event(app: App) {
         let non_key_event = Event::Mouse(crossterm::event::MouseEvent {
             kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
             column: 0,
