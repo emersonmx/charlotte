@@ -4,6 +4,13 @@ use crate::{
     waiting_screen::WaitingScreen,
 };
 use crossterm::event::{Event, EventStream};
+use proxy::{
+    gencert::{generate_certificate, generate_key_pair},
+    server::{
+        CertificateStore, Error as ServerError, Message as ProxyMessage, Request, RequestId,
+        Response, Server as ProxyServer,
+    },
+};
 use ratatui::{DefaultTerminal, Frame};
 use std::{
     collections::BTreeMap,
@@ -17,8 +24,8 @@ use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
-    StoreRequest(Box<(proxy::RequestId, proxy::Request)>),
-    StoreResponse(Box<(proxy::RequestId, proxy::Response)>),
+    StoreRequest(Box<(RequestId, Request)>),
+    StoreResponse(Box<(RequestId, Response)>),
     Quit,
     RequestsScreen(RequestsScreenMessage),
 }
@@ -31,17 +38,17 @@ pub trait Screen {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestEntry {
-    pub request_id: proxy::RequestId,
-    pub request: proxy::Request,
-    pub response: Option<proxy::Response>,
+    pub request_id: RequestId,
+    pub request: Request,
+    pub response: Option<Response>,
 }
 
-pub type RequestStore = Arc<Mutex<BTreeMap<proxy::RequestId, RequestEntry>>>;
+pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
 
 pub struct App {
-    abort_app_rx: Option<oneshot::Receiver<Result<(), proxy::ServerError>>>,
+    abort_app_rx: Option<oneshot::Receiver<Result<(), ServerError>>>,
     abort_server_tx: Option<oneshot::Sender<()>>,
-    message_rx: Option<mpsc::Receiver<proxy::Message>>,
+    message_rx: Option<mpsc::Receiver<ProxyMessage>>,
     config: Config,
     screen: Box<dyn Screen>,
     running: bool,
@@ -82,7 +89,7 @@ impl App {
         let server_addr: SocketAddr =
             format!("{}:{}", self.config.server_host, self.config.server_port).parse()?;
         let certificate_store = self.load_certificate_store()?;
-        let server = proxy::Server::new(server_addr, certificate_store, message_tx);
+        let server = ProxyServer::new(server_addr, certificate_store, message_tx);
         let server_handle = tokio::spawn(async move {
             let result = server.run(abort_server_rx).await;
             let _ = abort_app_tx.send(result);
@@ -103,7 +110,7 @@ impl App {
         self.exit_error.take().map_or(Ok(()), Err)
     }
 
-    fn load_certificate_store(&self) -> anyhow::Result<proxy::CertificateStore> {
+    fn load_certificate_store(&self) -> anyhow::Result<CertificateStore> {
         std::fs::create_dir_all(&self.config.certs_dir).map_err(|e| {
             anyhow::anyhow!(
                 "Failed to create certificates directory '{}': {}",
@@ -116,9 +123,9 @@ impl App {
             || !self.config.certs_dir.join("ca.key").exists()
             || !self.config.certs_dir.join("ca.pem").exists()
         {
-            let key_pair = proxy::generate_key_pair()
+            let key_pair = generate_key_pair()
                 .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
-            let cert = proxy::generate_certificate(&key_pair)
+            let cert = generate_certificate(&key_pair)
                 .map_err(|e| anyhow::anyhow!("Failed to generate certificate: {}", e))?;
 
             let certs_path = self.config.certs_dir.clone();
@@ -130,7 +137,7 @@ impl App {
             keypair_file.write_all(key_pair.serialized_der())?;
         }
 
-        proxy::CertificateStore::from_files(
+        CertificateStore::from_files(
             &self.config.certs_dir.join("ca.crt"),
             &self.config.certs_dir.join("ca.key"),
         )
@@ -165,15 +172,15 @@ impl App {
         }
     }
 
-    async fn handle_proxy_message(&mut self, message: proxy::Message) -> Option<Message> {
+    async fn handle_proxy_message(&mut self, message: ProxyMessage) -> Option<Message> {
         match message {
-            proxy::Message::RequestSent((id, request)) => {
+            ProxyMessage::RequestSent((id, request)) => {
                 return Some(Message::StoreRequest(Box::new((id, request))));
             }
-            proxy::Message::ResponseReceived((id, response)) => {
+            ProxyMessage::ResponseReceived((id, response)) => {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
-            proxy::Message::ErrorOccurred((request_id, error)) => {
+            ProxyMessage::ErrorOccurred((request_id, error)) => {
                 // TODO: We should probably display the error in the UI
                 // instead of just quitting the app
                 self.exit_error = Some(anyhow::anyhow!(
@@ -191,7 +198,7 @@ impl App {
 
     async fn handle_abort_app(
         &mut self,
-        result: Result<Result<(), proxy::ServerError>, oneshot::error::RecvError>,
+        result: Result<Result<(), ServerError>, oneshot::error::RecvError>,
     ) -> Option<Message> {
         match result {
             Ok(Err(error)) => {
@@ -233,11 +240,7 @@ impl App {
         None
     }
 
-    fn store_request(
-        &mut self,
-        request_id: proxy::RequestId,
-        request: proxy::Request,
-    ) -> Option<Message> {
+    fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
         if self.waiting_messages {
             self.screen = self.make_requests_screen();
             self.waiting_messages = false;
@@ -261,11 +264,7 @@ impl App {
         }
     }
 
-    fn store_response(
-        &mut self,
-        request_id: proxy::RequestId,
-        response: proxy::Response,
-    ) -> Option<Message> {
+    fn store_response(&mut self, request_id: RequestId, response: Response) -> Option<Message> {
         if self.waiting_messages {
             self.screen = self.make_requests_screen();
             self.waiting_messages = false;
@@ -332,7 +331,7 @@ mod tests {
     #[rstest]
     fn handle_store_request_message(mut app: App) {
         let request_id = 1;
-        let request = proxy::Request {
+        let request = Request {
             method: "GET".to_string(),
             url: "http://example.com".to_string(),
             headers: vec![],
@@ -357,14 +356,14 @@ mod tests {
     #[rstest]
     fn handle_store_response_message(mut app: App) {
         let request_id = 1;
-        let request = proxy::Request {
+        let request = Request {
             method: "GET".to_string(),
             url: "http://example.com".to_string(),
             headers: vec![],
             body: vec![],
         };
         app.store_request(request_id, request.clone());
-        let response = proxy::Response {
+        let response = Response {
             status: 200,
             headers: vec![],
             body: vec![],
@@ -405,9 +404,7 @@ mod tests {
     #[tokio::test]
     #[rstest]
     async fn handle_abort_app_with_proxy_error(mut app: App) {
-        let error = Ok(Err(proxy::ServerError::AcceptConnection(
-            "TEST ERROR".into(),
-        )));
+        let error = Ok(Err(ServerError::AcceptConnection("TEST ERROR".into())));
 
         let message = app.handle_abort_app(error).await;
 
@@ -421,7 +418,7 @@ mod tests {
     #[tokio::test]
     #[rstest]
     async fn handle_abort_app_with_recv_error(mut app: App) {
-        let (tx, rx) = oneshot::channel::<Result<(), proxy::ServerError>>();
+        let (tx, rx) = oneshot::channel::<Result<(), ServerError>>();
         drop(tx);
         let error = rx.await.unwrap_err();
 
