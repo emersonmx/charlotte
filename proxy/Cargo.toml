@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-http-body-util.workspace = true
-hyper-util.workspace = true
-hyper.workspace = true
-rcgen.workspace = true
-rustls.workspace = true
+http-body-util = "0.1"
+hyper = { version = "1.8", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+rcgen = { version = "0.14", features = ["x509-parser"] }
+rustls = { version = "0.23", features = ["aws-lc-rs", "std"] }
 thiserror.workspace = true
-tokio-rustls.workspace = true
+tokio-rustls = "0.26"
 tokio.workspace = true
-webpki-roots.workspace = true
+webpki-roots = "1.0"
 
 [dev-dependencies]
 rstest.workspace = true
