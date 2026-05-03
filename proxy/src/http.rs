@@ -10,6 +10,16 @@ pub(crate) type IncomingResponse = hyper::Response<hyper::body::Incoming>;
 pub(crate) type HyperRequest = hyper::Request<BoxBody<Bytes, Error>>;
 pub(crate) type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
+pub(crate) trait BytesExt {
+    fn boxed(self) -> BoxBody<Bytes, Error>;
+}
+
+impl BytesExt for Bytes {
+    fn boxed(self) -> BoxBody<Bytes, Error> {
+        Full::new(self).map_err(|e| match e {}).boxed()
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Failed to read request body: {0:?}")]
@@ -273,10 +283,6 @@ impl Response {
             body,
         })
     }
-}
-
-pub(crate) fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
-    Full::new(body).map_err(|e| match e {}).boxed()
 }
 
 pub(crate) fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<(String, String)> {

@@ -1,9 +1,8 @@
 use crate::{
     certs::CertificateStore,
     http::{
-        self, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest, IncomingResponse,
-        Request, RequestContextError, Response, ServerBuilder, boxed_body_from_bytes,
-        headers_to_vec,
+        self, BytesExt, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest,
+        IncomingResponse, Request, RequestContextError, Response, ServerBuilder, headers_to_vec,
     },
 };
 use http_body_util::{BodyExt, Empty};
@@ -231,10 +230,7 @@ impl Server {
         let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
         let (parts, body) = Request::into_parts(req).await.map_err(Error::Http)?;
-        let req_body = boxed_body_from_bytes(body.clone());
-        let channel_body = boxed_body_from_bytes(body);
-
-        let request = Request::from_parts(&parts, channel_body)
+        let request = Request::from_parts(&parts, body.clone().boxed())
             .await
             .map_err(Error::Http)?;
         let _ = self
@@ -242,7 +238,7 @@ impl Server {
             .send(Message::RequestSent((RequestId::new(request_id), request)))
             .await;
 
-        let req = HyperRequest::from_parts(parts, req_body);
+        let req = HyperRequest::from_parts(parts, body.boxed());
 
         if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
             let self_clone = self.clone();
@@ -284,9 +280,7 @@ impl Server {
         *res.status_mut() = hyper::StatusCode::OK;
 
         let (parts, body) = Response::into_parts(res).await.map_err(Error::Http)?;
-        let res_body = boxed_body_from_bytes(body.clone());
-        let channel_body = boxed_body_from_bytes(body);
-        let response = Response::from_parts(&parts, channel_body)
+        let response = Response::from_parts(&parts, body.clone().boxed())
             .await
             .map_err(Error::Http)?;
         let _ = self
@@ -297,7 +291,7 @@ impl Server {
             )))
             .await;
 
-        let res = HyperResponse::from_parts(parts, res_body);
+        let res = HyperResponse::from_parts(parts, body.boxed());
         Ok(res)
     }
 
@@ -385,10 +379,7 @@ impl Server {
 
         let (mut parts, body) = Request::into_parts(req).await.map_err(Error::Http)?;
         fix_relative_uri(&mut parts, is_tls)?;
-        let fetch_body = boxed_body_from_bytes(body.clone());
-        let channel_body = boxed_body_from_bytes(body);
-
-        let request = Request::from_parts(&parts, channel_body)
+        let request = Request::from_parts(&parts, body.clone().boxed())
             .await
             .map_err(Error::Http)?;
         let _ = self
@@ -398,14 +389,11 @@ impl Server {
 
         let self_clone = self.clone();
         let res = self_clone
-            .fetch(HyperRequest::from_parts(parts, fetch_body))
+            .fetch(HyperRequest::from_parts(parts, body.boxed()))
             .await?;
 
         let (parts, body) = Response::into_parts(res).await.map_err(Error::Http)?;
-        let client_body = boxed_body_from_bytes(body.clone());
-        let channel_body = boxed_body_from_bytes(body);
-
-        let response = Response::from_parts(&parts, channel_body)
+        let response = Response::from_parts(&parts, body.clone().boxed())
             .await
             .map_err(Error::Http)?;
         let _ = self
@@ -416,7 +404,7 @@ impl Server {
             )))
             .await;
 
-        Ok(HyperResponse::from_parts(parts, client_body))
+        Ok(HyperResponse::from_parts(parts, body.boxed()))
     }
 
     async fn fetch(self: Arc<Self>, req: HyperRequest) -> Result<IncomingResponse, Error> {
