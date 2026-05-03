@@ -6,6 +6,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{DnsName, ServerName};
 use std::{
+    fmt::Display,
     path::Path,
     sync::{
         Arc,
@@ -93,7 +94,20 @@ pub struct ResponseContextError {
     pub message: String,
 }
 
-pub type RequestId = usize;
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RequestId(usize);
+
+impl RequestId {
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl Display for RequestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
@@ -345,7 +359,7 @@ impl Server {
         let request = Request::from_parts(&parts, channel_body).await?;
         let _ = self
             .message_channel
-            .send(Message::RequestSent((request_id, request)))
+            .send(Message::RequestSent((RequestId::new(request_id), request)))
             .await;
 
         let req = HyperRequest::from_parts(parts, req_body);
@@ -361,14 +375,17 @@ impl Server {
                             .await
                         {
                             let _ = message_channel
-                                .send(Message::ErrorOccurred((Some(request_id), e.into())))
+                                .send(Message::ErrorOccurred((
+                                    Some(RequestId::new(request_id)),
+                                    e.into(),
+                                )))
                                 .await;
                         }
                     }
                     Err(e) => {
                         let _ = message_channel
                             .send(Message::ErrorOccurred((
-                                Some(request_id),
+                                Some(RequestId::new(request_id)),
                                 Error::TargetConnection {
                                     message: "Failed to upgrade connection for CONNECT request"
                                         .to_string(),
@@ -392,7 +409,10 @@ impl Server {
         let response = Response::from_parts(&parts, channel_body).await?;
         let _ = self
             .message_channel
-            .send(Message::ResponseReceived((request_id, response)))
+            .send(Message::ResponseReceived((
+                RequestId::new(request_id),
+                response,
+            )))
             .await;
 
         let res = HyperResponse::from_parts(parts, res_body);
@@ -454,7 +474,7 @@ impl Server {
                 let _ = self
                     .message_channel
                     .send(Message::ErrorOccurred((
-                        Some(request_id),
+                        Some(RequestId::new(request_id)),
                         Error::TargetConnection {
                             message: "Error handling upgraded TLS connection".to_string(),
                             source: err.into(),
@@ -489,7 +509,7 @@ impl Server {
         let request = Request::from_parts(&parts, channel_body).await?;
         let _ = self
             .message_channel
-            .send(Message::RequestSent((request_id, request)))
+            .send(Message::RequestSent((RequestId::new(request_id), request)))
             .await;
 
         let self_clone = self.clone();
@@ -504,7 +524,10 @@ impl Server {
         let response = Response::from_parts(&parts, channel_body).await?;
         let _ = self
             .message_channel
-            .send(Message::ResponseReceived((request_id, response)))
+            .send(Message::ResponseReceived((
+                RequestId::new(request_id),
+                response,
+            )))
             .await;
 
         Ok(HyperResponse::from_parts(parts, client_body))

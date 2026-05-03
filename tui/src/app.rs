@@ -330,7 +330,7 @@ mod tests {
 
     #[rstest]
     fn handle_store_request_message(mut app: App) {
-        let request_id = 1;
+        let request_id = RequestId::new(1);
         let request = Request {
             method: "GET".to_string(),
             url: "http://example.com".to_string(),
@@ -355,7 +355,7 @@ mod tests {
 
     #[rstest]
     fn handle_store_response_message(mut app: App) {
-        let request_id = 1;
+        let request_id = RequestId::new(1);
         let request = Request {
             method: "GET".to_string(),
             url: "http://example.com".to_string(),
