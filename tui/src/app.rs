@@ -6,10 +6,8 @@ use crate::{
 use crossterm::event::{Event, EventStream};
 use proxy::{
     certs::{CertificateStore, generate_certificate, generate_key_pair},
-    server::{
-        Error as ServerError, Message as ProxyMessage, Request, RequestId, Response,
-        Server as ProxyServer,
-    },
+    http::{Request, Response},
+    server::{Error as ServerError, Message as ProxyMessage, RequestId, Server as ProxyServer},
 };
 use ratatui::{DefaultTerminal, Frame};
 use std::{
@@ -303,7 +301,7 @@ pub fn is_quit_key_event(event: &Event) -> Option<Message> {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
-    use proxy::server::Method;
+    use proxy::http::Method;
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
 

@@ -1,13 +1,18 @@
-use crate::certs::CertificateStore;
-use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
+use crate::{
+    certs::CertificateStore,
+    http::{
+        self, Bytes, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest, IncomingResponse,
+        Request, RequestContextError, Response, ServerBuilder, boxed_body_from_bytes,
+        extract_request_parts, extract_response_parts, headers_to_vec,
+    },
+};
+use http_body_util::{BodyExt, Empty};
 use hyper::{
-    HeaderMap as HyperHeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn,
-    upgrade::Upgraded,
+    HeaderMap as HyperHeaderMap, Uri, header::HeaderValue, service::service_fn, upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{DnsName, ServerName};
 use std::{
-    collections::HashMap,
     fmt::Display,
     sync::{
         Arc,
@@ -24,12 +29,6 @@ use tokio_rustls::{
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-type ClientBuilder = hyper::client::conn::http1::Builder;
-type ServerBuilder = hyper::server::conn::http1::Builder;
-type IncomingRequest = hyper::Request<hyper::body::Incoming>;
-type IncomingResponse = hyper::Response<hyper::body::Incoming>;
-type HyperRequest = hyper::Request<BoxBody<Bytes, Error>>;
-type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -63,10 +62,8 @@ pub enum Error {
         source: BoxError,
     },
 
-    #[error("Failed to read request body: {0:?}")]
-    RequestBodyRead(Box<RequestContextError>),
-    #[error("Failed to read response body: {0:?}")]
-    ResponseBodyRead(Box<ResponseContextError>),
+    #[error("Failed to read or process HTTP message: {0}")]
+    Http(#[source] http::Error),
 
     #[error("Failed to send message: {message:?}, error: {source}")]
     Channel {
@@ -74,25 +71,6 @@ pub enum Error {
         #[source]
         source: BoxError,
     },
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct RequestContextError {
-    pub method: Method,
-    pub uri: String,
-    pub version: String,
-    pub headers: Vec<(String, String)>,
-    pub extensions: String,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ResponseContextError {
-    pub status: u16,
-    pub version: String,
-    pub headers: Vec<(String, String)>,
-    pub extensions: String,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -107,154 +85,6 @@ impl RequestId {
 impl Display for RequestId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub enum Method {
-    #[default]
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Head,
-    Options,
-    Connect,
-    Trace,
-}
-
-impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let method_str = match self {
-            Method::Get => "GET",
-            Method::Post => "POST",
-            Method::Put => "PUT",
-            Method::Patch => "PATCH",
-            Method::Delete => "DELETE",
-            Method::Head => "HEAD",
-            Method::Options => "OPTIONS",
-            Method::Connect => "CONNECT",
-            Method::Trace => "TRACE",
-        };
-        write!(f, "{method_str}")
-    }
-}
-
-impl From<hyper::Method> for Method {
-    fn from(method: hyper::Method) -> Self {
-        match method {
-            hyper::Method::GET => Method::Get,
-            hyper::Method::POST => Method::Post,
-            hyper::Method::PUT => Method::Put,
-            hyper::Method::PATCH => Method::Patch,
-            hyper::Method::DELETE => Method::Delete,
-            hyper::Method::HEAD => Method::Head,
-            hyper::Method::OPTIONS => Method::Options,
-            hyper::Method::CONNECT => Method::Connect,
-            hyper::Method::TRACE => Method::Trace,
-            _ => Method::default(),
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct Url {
-    pub scheme: String,
-    pub host: String,
-    pub port: Option<u16>,
-    pub path: String,
-    pub query: Option<String>,
-}
-
-impl Display for Url {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let port_part = if let Some(port) = self.port {
-            format!(":{port}")
-        } else {
-            "".to_string()
-        };
-        let query_part = if let Some(query) = &self.query {
-            format!("?{query}")
-        } else {
-            "".to_string()
-        };
-        write!(
-            f,
-            "{}://{}{}{}{}",
-            self.scheme, self.host, port_part, self.path, query_part
-        )
-    }
-}
-
-impl From<Uri> for Url {
-    fn from(uri: Uri) -> Self {
-        let scheme = uri.scheme_str().unwrap_or("http").to_string();
-        let host = uri.host().unwrap_or("127.0.0.1").to_string();
-        let port = uri.port_u16();
-        let path = uri.path().to_string();
-        let query = uri.query().map(|q| q.to_string());
-
-        Self {
-            scheme,
-            host,
-            port,
-            path,
-            query,
-        }
-    }
-}
-
-impl From<&str> for Url {
-    fn from(s: &str) -> Self {
-        let uri = s.parse::<Uri>().unwrap_or_else(|_| Uri::from_static("/"));
-        Self::from(uri)
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Request {
-    pub method: Method,
-    pub url: Url,
-    pub headers: Vec<(String, String)>,
-    pub body: Vec<u8>,
-}
-
-impl Request {
-    async fn from_parts(
-        parts: &hyper::http::request::Parts,
-        body: BoxBody<Bytes, Error>,
-    ) -> Result<Self, Error> {
-        let body = body.collect().await?.to_bytes().to_vec();
-
-        Ok(Self {
-            method: parts.method.clone().into(),
-            url: parts.uri.clone().into(),
-            headers: headers_to_vec(&parts.headers),
-            body,
-        })
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Response {
-    pub status: u16,
-    pub headers: Vec<(String, String)>,
-    pub body: Vec<u8>,
-}
-
-impl Response {
-    async fn from_parts(
-        parts: &hyper::http::response::Parts,
-        body: BoxBody<Bytes, Error>,
-    ) -> Result<Self, Error> {
-        let body = body.collect().await?.to_bytes().to_vec();
-
-        Ok(Self {
-            status: parts.status.as_u16(),
-            headers: headers_to_vec(&parts.headers),
-            body,
-        })
     }
 }
 
@@ -399,11 +229,13 @@ impl Server {
     ) -> Result<HyperResponse, Error> {
         let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-        let (parts, body) = extract_request_parts(req).await?;
+        let (parts, body) = extract_request_parts(req).await.map_err(Error::Http)?;
         let req_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
 
-        let request = Request::from_parts(&parts, channel_body).await?;
+        let request = Request::from_parts(&parts, channel_body)
+            .await
+            .map_err(Error::Http)?;
         let _ = self
             .message_channel
             .send(Message::RequestSent((RequestId::new(request_id), request)))
@@ -450,10 +282,12 @@ impl Server {
         let mut res = HyperResponse::new(empty);
         *res.status_mut() = hyper::StatusCode::OK;
 
-        let (parts, body) = extract_response_parts(res).await?;
+        let (parts, body) = extract_response_parts(res).await.map_err(Error::Http)?;
         let res_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
-        let response = Response::from_parts(&parts, channel_body).await?;
+        let response = Response::from_parts(&parts, channel_body)
+            .await
+            .map_err(Error::Http)?;
         let _ = self
             .message_channel
             .send(Message::ResponseReceived((
@@ -548,12 +382,14 @@ impl Server {
     ) -> Result<HyperResponse, Error> {
         let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-        let (mut parts, body) = extract_request_parts(req).await?;
+        let (mut parts, body) = extract_request_parts(req).await.map_err(Error::Http)?;
         fix_relative_uri(&mut parts, is_tls)?;
         let fetch_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
 
-        let request = Request::from_parts(&parts, channel_body).await?;
+        let request = Request::from_parts(&parts, channel_body)
+            .await
+            .map_err(Error::Http)?;
         let _ = self
             .message_channel
             .send(Message::RequestSent((RequestId::new(request_id), request)))
@@ -564,11 +400,13 @@ impl Server {
             .fetch(HyperRequest::from_parts(parts, fetch_body))
             .await?;
 
-        let (parts, body) = extract_response_parts(res).await?;
+        let (parts, body) = extract_response_parts(res).await.map_err(Error::Http)?;
         let client_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
 
-        let response = Response::from_parts(&parts, channel_body).await?;
+        let response = Response::from_parts(&parts, channel_body)
+            .await
+            .map_err(Error::Http)?;
         let _ = self
             .message_channel
             .send(Message::ResponseReceived((
@@ -769,93 +607,6 @@ fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
             headers: headers_to_vec(headers),
         })
     }
-}
-
-async fn extract_request_parts<B>(
-    req: hyper::Request<B>,
-) -> Result<(hyper::http::request::Parts, Bytes), Error>
-where
-    B: hyper::body::Body,
-    B::Error: std::fmt::Debug,
-{
-    let (mut parts, body) = req.into_parts();
-    clean_request_headers(&mut parts.headers);
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| {
-            Error::RequestBodyRead(
-                RequestContextError {
-                    method: parts.method.clone().into(),
-                    uri: parts.uri.to_string(),
-                    version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
-                    extensions: format!("{:?}", parts.extensions),
-                    message: format!("{e:?}"),
-                }
-                .into(),
-            )
-        })?
-        .to_bytes();
-    Ok((parts, body))
-}
-
-fn clean_request_headers(headers: &mut HyperHeaderMap) {
-    headers.remove(hyper::header::CONNECTION);
-    headers.remove("proxy-connection");
-    headers.remove("keep-alive");
-    headers.remove(hyper::header::TRANSFER_ENCODING);
-}
-
-async fn extract_response_parts<B>(
-    res: hyper::Response<B>,
-) -> Result<(hyper::http::response::Parts, Bytes), Error>
-where
-    B: hyper::body::Body,
-    B::Error: std::fmt::Debug,
-{
-    let (mut parts, body) = res.into_parts();
-    clean_response_headers(&mut parts.headers);
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| {
-            Error::ResponseBodyRead(
-                ResponseContextError {
-                    status: parts.status.as_u16(),
-                    version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
-                    extensions: format!("{:?}", parts.extensions),
-                    message: format!("{e:?}"),
-                }
-                .into(),
-            )
-        })?
-        .to_bytes();
-    Ok((parts, body))
-}
-
-fn clean_response_headers(headers: &mut HyperHeaderMap) {
-    headers.remove(hyper::header::CONNECTION);
-    headers.remove(hyper::header::TRANSFER_ENCODING);
-}
-
-fn boxed_body_from_bytes(body: Bytes) -> BoxBody<Bytes, Error> {
-    Full::new(body).map_err(|e| match e {}).boxed()
-}
-
-fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<(String, String)> {
-    headers
-        .iter()
-        .map(|(k, v)| {
-            (
-                k.as_str().to_string(),
-                v.to_str()
-                    .unwrap_or("<invalid UTF-8 in header value>")
-                    .to_string(),
-            )
-        })
-        .collect()
 }
 
 fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Result<(), Error> {
