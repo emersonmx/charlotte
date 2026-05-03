@@ -1,7 +1,6 @@
 pub(crate) use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
-pub(crate) use hyper::body::Bytes;
-use hyper::{HeaderMap as HyperHeaderMap, Uri};
+use hyper::{HeaderMap as HyperHeaderMap, Uri, body::Bytes};
 use std::fmt::Display;
 
 pub(crate) type ClientBuilder = hyper::client::conn::http1::Builder;
@@ -149,6 +148,35 @@ pub struct Request {
 }
 
 impl Request {
+    pub(crate) async fn into_parts<B>(
+        req: hyper::Request<B>,
+    ) -> Result<(hyper::http::request::Parts, Bytes), Error>
+    where
+        B: hyper::body::Body,
+        B::Error: std::fmt::Debug,
+    {
+        let (mut parts, body) = req.into_parts();
+        clean_request_headers(&mut parts.headers);
+        let body = body
+            .collect()
+            .await
+            .map_err(|e| {
+                Error::RequestBodyRead(
+                    RequestContextError {
+                        method: parts.method.clone().into(),
+                        uri: parts.uri.to_string(),
+                        version: format!("{:?}", parts.version),
+                        headers: headers_to_vec(&parts.headers),
+                        extensions: format!("{:?}", parts.extensions),
+                        message: format!("{e:?}"),
+                    }
+                    .into(),
+                )
+            })?
+            .to_bytes();
+        Ok((parts, body))
+    }
+
     pub(crate) async fn from_parts(
         parts: &hyper::http::request::Parts,
         body: BoxBody<Bytes, Error>,
@@ -189,7 +217,35 @@ pub struct Response {
 }
 
 impl Response {
-    pub async fn from_parts(
+    pub(crate) async fn into_parts<B>(
+        res: hyper::Response<B>,
+    ) -> Result<(hyper::http::response::Parts, Bytes), Error>
+    where
+        B: hyper::body::Body,
+        B::Error: std::fmt::Debug,
+    {
+        let (mut parts, body) = res.into_parts();
+        clean_response_headers(&mut parts.headers);
+        let body = body
+            .collect()
+            .await
+            .map_err(|e| {
+                Error::ResponseBodyRead(
+                    ResponseContextError {
+                        status: parts.status.as_u16(),
+                        version: format!("{:?}", parts.version),
+                        headers: headers_to_vec(&parts.headers),
+                        extensions: format!("{:?}", parts.extensions),
+                        message: format!("{e:?}"),
+                    }
+                    .into(),
+                )
+            })?
+            .to_bytes();
+        Ok((parts, body))
+    }
+
+    pub(crate) async fn from_parts(
         parts: &hyper::http::response::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
@@ -237,68 +293,11 @@ pub(crate) fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<(String, String)> 
         .collect()
 }
 
-pub(crate) async fn extract_request_parts<B>(
-    req: hyper::Request<B>,
-) -> Result<(hyper::http::request::Parts, Bytes), Error>
-where
-    B: hyper::body::Body,
-    B::Error: std::fmt::Debug,
-{
-    let (mut parts, body) = req.into_parts();
-    clean_request_headers(&mut parts.headers);
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| {
-            Error::RequestBodyRead(
-                RequestContextError {
-                    method: parts.method.clone().into(),
-                    uri: parts.uri.to_string(),
-                    version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
-                    extensions: format!("{:?}", parts.extensions),
-                    message: format!("{e:?}"),
-                }
-                .into(),
-            )
-        })?
-        .to_bytes();
-    Ok((parts, body))
-}
-
 fn clean_request_headers(headers: &mut HyperHeaderMap) {
     headers.remove(hyper::header::CONNECTION);
     headers.remove("proxy-connection");
     headers.remove("keep-alive");
     headers.remove(hyper::header::TRANSFER_ENCODING);
-}
-
-pub(crate) async fn extract_response_parts<B>(
-    res: hyper::Response<B>,
-) -> Result<(hyper::http::response::Parts, Bytes), Error>
-where
-    B: hyper::body::Body,
-    B::Error: std::fmt::Debug,
-{
-    let (mut parts, body) = res.into_parts();
-    clean_response_headers(&mut parts.headers);
-    let body = body
-        .collect()
-        .await
-        .map_err(|e| {
-            Error::ResponseBodyRead(
-                ResponseContextError {
-                    status: parts.status.as_u16(),
-                    version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
-                    extensions: format!("{:?}", parts.extensions),
-                    message: format!("{e:?}"),
-                }
-                .into(),
-            )
-        })?
-        .to_bytes();
-    Ok((parts, body))
 }
 
 fn clean_response_headers(headers: &mut HyperHeaderMap) {

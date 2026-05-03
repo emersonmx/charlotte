@@ -1,14 +1,15 @@
 use crate::{
     certs::CertificateStore,
     http::{
-        self, Bytes, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest, IncomingResponse,
+        self, ClientBuilder, HyperRequest, HyperResponse, IncomingRequest, IncomingResponse,
         Request, RequestContextError, Response, ServerBuilder, boxed_body_from_bytes,
-        extract_request_parts, extract_response_parts, headers_to_vec,
+        headers_to_vec,
     },
 };
 use http_body_util::{BodyExt, Empty};
 use hyper::{
-    HeaderMap as HyperHeaderMap, Uri, header::HeaderValue, service::service_fn, upgrade::Upgraded,
+    HeaderMap as HyperHeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn,
+    upgrade::Upgraded,
 };
 use hyper_util::rt::TokioIo;
 use rustls::pki_types::{DnsName, ServerName};
@@ -229,7 +230,7 @@ impl Server {
     ) -> Result<HyperResponse, Error> {
         let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-        let (parts, body) = extract_request_parts(req).await.map_err(Error::Http)?;
+        let (parts, body) = Request::into_parts(req).await.map_err(Error::Http)?;
         let req_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
 
@@ -282,7 +283,7 @@ impl Server {
         let mut res = HyperResponse::new(empty);
         *res.status_mut() = hyper::StatusCode::OK;
 
-        let (parts, body) = extract_response_parts(res).await.map_err(Error::Http)?;
+        let (parts, body) = Response::into_parts(res).await.map_err(Error::Http)?;
         let res_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
         let response = Response::from_parts(&parts, channel_body)
@@ -382,7 +383,7 @@ impl Server {
     ) -> Result<HyperResponse, Error> {
         let request_id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
 
-        let (mut parts, body) = extract_request_parts(req).await.map_err(Error::Http)?;
+        let (mut parts, body) = Request::into_parts(req).await.map_err(Error::Http)?;
         fix_relative_uri(&mut parts, is_tls)?;
         let fetch_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
@@ -400,7 +401,7 @@ impl Server {
             .fetch(HyperRequest::from_parts(parts, fetch_body))
             .await?;
 
-        let (parts, body) = extract_response_parts(res).await.map_err(Error::Http)?;
+        let (parts, body) = Response::into_parts(res).await.map_err(Error::Http)?;
         let client_body = boxed_body_from_bytes(body.clone());
         let channel_body = boxed_body_from_bytes(body);
 
