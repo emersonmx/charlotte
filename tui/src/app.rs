@@ -301,7 +301,7 @@ pub fn is_quit_key_event(event: &Event) -> Option<Message> {
 mod tests {
     use super::*;
     use insta::assert_snapshot;
-    use proxy::http::{HeaderMap, Method};
+    use proxy::http::{Body, HeaderMap, Method};
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
 
@@ -334,7 +334,7 @@ mod tests {
             method: Method::Get,
             url: "http://example.com".into(),
             headers: HeaderMap::new(vec![]),
-            body: vec![],
+            body: Body::new(vec![]),
         };
         let store_message = Message::StoreRequest(Box::new((request_id, request.clone())));
         let expected_message =
@@ -359,13 +359,13 @@ mod tests {
             method: Method::Get,
             url: "http://example.com".into(),
             headers: HeaderMap::new(vec![]),
-            body: vec![],
+            body: Body::new(vec![]),
         };
         app.store_request(request_id, request.clone());
         let response = Response {
             status: 200,
             headers: HeaderMap::new(vec![]),
-            body: vec![],
+            body: Body::new(vec![]),
         };
         let store_message = Message::StoreResponse(Box::new((request_id, response.clone())));
         let expected_message =

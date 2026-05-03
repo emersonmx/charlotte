@@ -42,7 +42,7 @@ impl From<&RequestEntry> for RequestEntryRow {
             request_id: entry.request_id.to_string(),
             method: entry.request.method.to_string(),
             url: entry.request.url.to_string(),
-            body: String::from_utf8_lossy(&entry.request.body).to_string(),
+            body: String::from_utf8_lossy(entry.request.body.as_bytes()).to_string(),
             status,
         }
     }

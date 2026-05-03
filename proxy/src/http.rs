@@ -213,11 +213,24 @@ impl From<HyperHeaderMap> for HeaderMap {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct Body(Vec<u8>);
+
+impl Body {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
     pub method: Method,
     pub url: Url,
     pub headers: HeaderMap,
-    pub body: Vec<u8>,
+    pub body: Body,
 }
 
 impl Request {
@@ -230,24 +243,7 @@ impl Request {
     {
         let (mut parts, body) = req.into_parts();
         clean_request_headers(&mut parts.headers);
-        let headers: HeaderMap = parts.headers.clone().into();
-        let body = body
-            .collect()
-            .await
-            .map_err(|e| {
-                Error::RequestBodyRead(
-                    RequestContextError {
-                        method: parts.method.clone().into(),
-                        uri: parts.uri.to_string(),
-                        version: format!("{:?}", parts.version),
-                        headers,
-                        extensions: format!("{:?}", parts.extensions),
-                        message: format!("{e:?}"),
-                    }
-                    .into(),
-                )
-            })?
-            .to_bytes();
+        let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
 
@@ -255,6 +251,21 @@ impl Request {
         parts: &hyper::http::request::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
+        let headers: HeaderMap = parts.headers.clone().into();
+        let body = Self::read_body(parts, body).await?;
+        Ok(Self {
+            method: parts.method.clone().into(),
+            url: parts.uri.clone().into(),
+            headers,
+            body: Body::new(body.to_vec()),
+        })
+    }
+
+    async fn read_body<B>(parts: &hyper::http::request::Parts, body: B) -> Result<Bytes, Error>
+    where
+        B: hyper::body::Body,
+        B::Error: std::fmt::Debug,
+    {
         let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
@@ -272,15 +283,8 @@ impl Request {
                     .into(),
                 )
             })?
-            .to_bytes()
-            .to_vec();
-
-        Ok(Self {
-            method: parts.method.clone().into(),
-            url: parts.uri.clone().into(),
-            headers,
-            body,
-        })
+            .to_bytes();
+        Ok(body)
     }
 }
 
@@ -288,7 +292,7 @@ impl Request {
 pub struct Response {
     pub status: u16,
     pub headers: HeaderMap,
-    pub body: Vec<u8>,
+    pub body: Body,
 }
 
 impl Response {
@@ -301,23 +305,7 @@ impl Response {
     {
         let (mut parts, body) = res.into_parts();
         clean_response_headers(&mut parts.headers);
-        let headers: HeaderMap = parts.headers.clone().into();
-        let body = body
-            .collect()
-            .await
-            .map_err(|e| {
-                Error::ResponseBodyRead(
-                    ResponseContextError {
-                        status: parts.status.as_u16(),
-                        version: format!("{:?}", parts.version),
-                        headers,
-                        extensions: format!("{:?}", parts.extensions),
-                        message: format!("{e:?}"),
-                    }
-                    .into(),
-                )
-            })?
-            .to_bytes();
+        let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
 
@@ -325,6 +313,20 @@ impl Response {
         parts: &hyper::http::response::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
+        let headers: HeaderMap = parts.headers.clone().into();
+        let body = Self::read_body(parts, body).await?;
+        Ok(Self {
+            status: parts.status.as_u16(),
+            headers,
+            body: Body::new(body.to_vec()),
+        })
+    }
+
+    async fn read_body<B>(parts: &hyper::http::response::Parts, body: B) -> Result<Bytes, Error>
+    where
+        B: hyper::body::Body,
+        B::Error: std::fmt::Debug,
+    {
         let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
@@ -341,14 +343,8 @@ impl Response {
                     .into(),
                 )
             })?
-            .to_bytes()
-            .to_vec();
-
-        Ok(Self {
-            status: parts.status.as_u16(),
-            headers,
-            body,
-        })
+            .to_bytes();
+        Ok(body)
     }
 }
 
