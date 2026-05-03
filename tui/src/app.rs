@@ -334,7 +334,7 @@ mod tests {
         let request_id = RequestId::new(1);
         let request = Request {
             method: Method::Get,
-            url: "http://example.com".to_string(),
+            url: "http://example.com".into(),
             headers: vec![],
             body: vec![],
         };
@@ -359,7 +359,7 @@ mod tests {
         let request_id = RequestId::new(1);
         let request = Request {
             method: Method::Get,
-            url: "http://example.com".to_string(),
+            url: "http://example.com".into(),
             headers: vec![],
             body: vec![],
         };

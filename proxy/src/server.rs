@@ -156,10 +156,64 @@ impl From<hyper::Method> for Method {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Url {
+    pub scheme: String,
+    pub host: String,
+    pub port: Option<u16>,
+    pub path: String,
+    pub query: Option<String>,
+}
+
+impl Display for Url {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let port_part = if let Some(port) = self.port {
+            format!(":{port}")
+        } else {
+            "".to_string()
+        };
+        let query_part = if let Some(query) = &self.query {
+            format!("?{query}")
+        } else {
+            "".to_string()
+        };
+        write!(
+            f,
+            "{}://{}{}{}{}",
+            self.scheme, self.host, port_part, self.path, query_part
+        )
+    }
+}
+
+impl From<Uri> for Url {
+    fn from(uri: Uri) -> Self {
+        let scheme = uri.scheme_str().unwrap_or("http").to_string();
+        let host = uri.host().unwrap_or("127.0.0.1").to_string();
+        let port = uri.port_u16();
+        let path = uri.path().to_string();
+        let query = uri.query().map(|q| q.to_string());
+
+        Self {
+            scheme,
+            host,
+            port,
+            path,
+            query,
+        }
+    }
+}
+
+impl From<&str> for Url {
+    fn from(s: &str) -> Self {
+        let uri = s.parse::<Uri>().unwrap_or_else(|_| Uri::from_static("/"));
+        Self::from(uri)
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
     pub method: Method,
-    pub url: String,
+    pub url: Url,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
 }
@@ -173,7 +227,7 @@ impl Request {
 
         Ok(Self {
             method: parts.method.clone().into(),
-            url: parts.uri.to_string(),
+            url: parts.uri.clone().into(),
             headers: headers_to_vec(&parts.headers),
             body,
         })
@@ -474,7 +528,7 @@ impl Server {
     ) -> Result<(), Error> {
         let request_id = self.request_id_counter.load(Ordering::Relaxed);
 
-        let domain = addr.split(':').next().unwrap_or("localhost");
+        let domain = addr.split(':').next().unwrap_or("127.0.0.1");
         let (domain_cert, domain_keypair) =
             self.certificate_store
                 .generate_cert(domain)
