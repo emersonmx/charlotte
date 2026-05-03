@@ -85,7 +85,7 @@ mod tests {
     }
 
     #[rstest]
-    fn quit_on_q_key(mut screen: WaitingScreen) {
+    fn quit_on_q_key(screen: WaitingScreen) {
         let quit_event = Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char('q'),
             modifiers: crossterm::event::KeyModifiers::NONE,
