@@ -255,7 +255,6 @@ dependencies = [
  "anyhow",
  "clap",
  "crossterm",
- "gencert",
  "insta",
  "proxy",
  "ratatui",
@@ -716,15 +715,6 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
-]
-
-[[package]]
-name = "gencert"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "rcgen",
- "thiserror 2.0.18",
 ]
 
 [[package]]

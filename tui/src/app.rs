@@ -39,7 +39,7 @@ pub struct RequestEntry {
 pub type RequestStore = Arc<Mutex<BTreeMap<proxy::RequestId, RequestEntry>>>;
 
 pub struct App {
-    abort_app_rx: Option<oneshot::Receiver<Result<(), proxy::Error>>>,
+    abort_app_rx: Option<oneshot::Receiver<Result<(), proxy::ServerError>>>,
     abort_server_tx: Option<oneshot::Sender<()>>,
     message_rx: Option<mpsc::Receiver<proxy::Message>>,
     config: Config,
@@ -116,9 +116,9 @@ impl App {
             || !self.config.certs_dir.join("ca.key").exists()
             || !self.config.certs_dir.join("ca.pem").exists()
         {
-            let key_pair = gencert::generate_key_pair()
+            let key_pair = proxy::generate_key_pair()
                 .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
-            let cert = gencert::generate_certificate(&key_pair)
+            let cert = proxy::generate_certificate(&key_pair)
                 .map_err(|e| anyhow::anyhow!("Failed to generate certificate: {}", e))?;
 
             let certs_path = self.config.certs_dir.clone();
@@ -191,7 +191,7 @@ impl App {
 
     async fn handle_abort_app(
         &mut self,
-        result: Result<Result<(), proxy::Error>, oneshot::error::RecvError>,
+        result: Result<Result<(), proxy::ServerError>, oneshot::error::RecvError>,
     ) -> Option<Message> {
         match result {
             Ok(Err(error)) => {
@@ -405,7 +405,9 @@ mod tests {
     #[tokio::test]
     #[rstest]
     async fn handle_abort_app_with_proxy_error(mut app: App) {
-        let error = Ok(Err(proxy::Error::AcceptConnection("TEST ERROR".into())));
+        let error = Ok(Err(proxy::ServerError::AcceptConnection(
+            "TEST ERROR".into(),
+        )));
 
         let message = app.handle_abort_app(error).await;
 
@@ -419,7 +421,7 @@ mod tests {
     #[tokio::test]
     #[rstest]
     async fn handle_abort_app_with_recv_error(mut app: App) {
-        let (tx, rx) = oneshot::channel::<Result<(), proxy::Error>>();
+        let (tx, rx) = oneshot::channel::<Result<(), proxy::ServerError>>();
         drop(tx);
         let error = rx.await.unwrap_err();
 

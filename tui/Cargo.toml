@@ -7,7 +7,6 @@ edition = "2024"
 anyhow.workspace = true
 clap.workspace = true
 crossterm.workspace = true
-gencert.workspace = true
 proxy.workspace = true
 ratatui-textarea.workspace = true
 ratatui.workspace = true
