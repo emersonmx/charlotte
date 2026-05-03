@@ -1,7 +1,7 @@
 pub(crate) use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::{HeaderMap as HyperHeaderMap, Uri, body::Bytes};
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 pub(crate) type ClientBuilder = hyper::client::conn::http1::Builder;
 pub(crate) type ServerBuilder = hyper::server::conn::http1::Builder;
@@ -33,7 +33,7 @@ pub struct RequestContextError {
     pub method: Method,
     pub uri: String,
     pub version: String,
-    pub headers: Vec<Header>,
+    pub headers: HeaderMap,
     pub extensions: String,
     pub message: String,
 }
@@ -42,7 +42,7 @@ pub struct RequestContextError {
 pub struct ResponseContextError {
     pub status: u16,
     pub version: String,
-    pub headers: Vec<Header>,
+    pub headers: HeaderMap,
     pub extensions: String,
     pub message: String,
 }
@@ -163,10 +163,60 @@ impl Header {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct HeaderMap {
+    headers: Vec<Header>,
+    index_map: HashMap<String, Vec<usize>>,
+}
+
+impl HeaderMap {
+    pub fn new(headers: Vec<Header>) -> Self {
+        let mut index_map = HashMap::new();
+        for (i, header) in headers.iter().enumerate() {
+            index_map
+                .entry(header.key().to_lowercase())
+                .or_insert_with(Vec::new)
+                .push(i);
+        }
+        Self { headers, index_map }
+    }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.index_map
+            .get(&key.to_lowercase())
+            .and_then(|indices| indices.first())
+            .map(|&i| self.headers[i].value())
+    }
+
+    pub fn get_all(&self, key: &str) -> Vec<&str> {
+        self.index_map
+            .get(&key.to_lowercase())
+            .map(|indices| indices.iter().map(|&i| self.headers[i].value()).collect())
+            .unwrap_or_default()
+    }
+}
+
+impl From<HyperHeaderMap> for HeaderMap {
+    fn from(headers: HyperHeaderMap) -> Self {
+        let headers_vec = headers
+            .iter()
+            .map(|(k, v)| {
+                Header(
+                    k.as_str().to_string(),
+                    v.to_str()
+                        .unwrap_or("<invalid UTF-8 in header value>")
+                        .to_string(),
+                )
+            })
+            .collect();
+        Self::new(headers_vec)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
     pub method: Method,
     pub url: Url,
-    pub headers: Vec<Header>,
+    pub headers: HeaderMap,
     pub body: Vec<u8>,
 }
 
@@ -180,6 +230,7 @@ impl Request {
     {
         let (mut parts, body) = req.into_parts();
         clean_request_headers(&mut parts.headers);
+        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -189,7 +240,7 @@ impl Request {
                         method: parts.method.clone().into(),
                         uri: parts.uri.to_string(),
                         version: format!("{:?}", parts.version),
-                        headers: headers_to_vec(&parts.headers),
+                        headers,
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
@@ -204,6 +255,7 @@ impl Request {
         parts: &hyper::http::request::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
+        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -213,7 +265,7 @@ impl Request {
                         method: parts.method.clone().into(),
                         uri: parts.uri.to_string(),
                         version: format!("{:?}", parts.version),
-                        headers: headers_to_vec(&parts.headers),
+                        headers: headers.clone(),
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
@@ -226,7 +278,7 @@ impl Request {
         Ok(Self {
             method: parts.method.clone().into(),
             url: parts.uri.clone().into(),
-            headers: headers_to_vec(&parts.headers),
+            headers,
             body,
         })
     }
@@ -235,7 +287,7 @@ impl Request {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Response {
     pub status: u16,
-    pub headers: Vec<Header>,
+    pub headers: HeaderMap,
     pub body: Vec<u8>,
 }
 
@@ -249,6 +301,7 @@ impl Response {
     {
         let (mut parts, body) = res.into_parts();
         clean_response_headers(&mut parts.headers);
+        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -257,7 +310,7 @@ impl Response {
                     ResponseContextError {
                         status: parts.status.as_u16(),
                         version: format!("{:?}", parts.version),
-                        headers: headers_to_vec(&parts.headers),
+                        headers,
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
@@ -272,6 +325,7 @@ impl Response {
         parts: &hyper::http::response::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
+        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -280,7 +334,7 @@ impl Response {
                     ResponseContextError {
                         status: parts.status.as_u16(),
                         version: format!("{:?}", parts.version),
-                        headers: headers_to_vec(&parts.headers),
+                        headers: headers.clone(),
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
@@ -292,24 +346,10 @@ impl Response {
 
         Ok(Self {
             status: parts.status.as_u16(),
-            headers: headers_to_vec(&parts.headers),
+            headers,
             body,
         })
     }
-}
-
-pub(crate) fn headers_to_vec(headers: &HyperHeaderMap) -> Vec<Header> {
-    headers
-        .iter()
-        .map(|(k, v)| {
-            Header(
-                k.as_str().to_string(),
-                v.to_str()
-                    .unwrap_or("<invalid UTF-8 in header value>")
-                    .to_string(),
-            )
-        })
-        .collect()
 }
 
 fn clean_request_headers(headers: &mut HyperHeaderMap) {

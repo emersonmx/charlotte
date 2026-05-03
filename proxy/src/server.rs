@@ -1,8 +1,8 @@
 use crate::{
     certs::CertificateStore,
     http::{
-        self, BytesExt, ClientBuilder, Header, HyperRequest, HyperResponse, IncomingRequest,
-        IncomingResponse, Request, RequestContextError, Response, ServerBuilder, headers_to_vec,
+        self, BytesExt, ClientBuilder, HeaderMap, HyperRequest, HyperResponse, IncomingRequest,
+        IncomingResponse, Request, RequestContextError, Response, ServerBuilder,
     },
 };
 use http_body_util::{BodyExt, Empty};
@@ -44,7 +44,7 @@ pub enum Error {
     TargetAddress {
         message: String,
         uri: String,
-        headers: Vec<Header>,
+        headers: HeaderMap,
     },
     #[error("Failed to fix relative URI: {0:?}")]
     FixRelativeUri(Box<RequestContextError>),
@@ -544,29 +544,25 @@ fn get_target_addr(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error>
 }
 
 fn get_host(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
+    let headers: HeaderMap = headers.clone().into();
     if let Some(host) = uri.host() {
         Ok(host.to_string())
-    } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
-            message: "Invalid HOST header format (not UTF-8)".to_string(),
-            uri: uri.to_string(),
-            headers: headers_to_vec(headers),
-        })?;
-
-        match host_str.rsplit_once(':') {
+    } else if let Some(host) = headers.get(hyper::header::HOST.as_str()) {
+        match host.rsplit_once(':') {
             Some((host, _)) => Ok(host.to_string()),
-            None => Ok(host_str.to_string()),
+            None => Ok(host.to_string()),
         }
     } else {
         Err(Error::TargetAddress {
             message: "Missing host information in URI or Host header".to_string(),
             uri: uri.to_string(),
-            headers: headers_to_vec(headers),
+            headers,
         })
     }
 }
 
 fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
+    let headers: HeaderMap = headers.clone().into();
     let default_port = match uri.scheme_str() {
         Some("https") => 443_u16,
         _ => 80_u16,
@@ -575,14 +571,8 @@ fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
     if uri.host().is_some() {
         let port = uri.port_u16().unwrap_or(default_port);
         Ok(port.to_string())
-    } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
-            message: "Invalid HOST header format (not UTF-8)".to_string(),
-            uri: uri.to_string(),
-            headers: headers_to_vec(headers),
-        })?;
-
-        match host_str.rsplit_once(':') {
+    } else if let Some(host) = headers.get(hyper::header::HOST.as_str()) {
+        match host.rsplit_once(':') {
             Some((_, port_str)) => {
                 let port = port_str.parse::<u16>().unwrap_or(default_port);
                 Ok(port.to_string())
@@ -593,7 +583,7 @@ fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
         Err(Error::TargetAddress {
             message: "Missing port information in URI or Host header".to_string(),
             uri: uri.to_string(),
-            headers: headers_to_vec(headers),
+            headers,
         })
     }
 }
@@ -602,13 +592,14 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
     if parts.uri.scheme().is_none()
         && let Some(host) = parts.headers.get(hyper::header::HOST)
     {
+        let headers: HeaderMap = parts.headers.clone().into();
         let host = host.to_str().map_err(|_| {
             Error::FixRelativeUri(
                 RequestContextError {
                     method: parts.method.clone().into(),
                     uri: parts.uri.to_string(),
                     version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
+                    headers: headers.clone(),
                     extensions: format!("{:?}", parts.extensions),
                     message: "Invalid HOST header format (not UTF-8)".to_string(),
                 }
@@ -623,7 +614,7 @@ fn fix_relative_uri(parts: &mut hyper::http::request::Parts, is_tls: bool) -> Re
                     method: parts.method.clone().into(),
                     uri: parts.uri.to_string(),
                     version: format!("{:?}", parts.version),
-                    headers: headers_to_vec(&parts.headers),
+                    headers,
                     extensions: format!("{:?}", parts.extensions),
                     message: format!("Failed to parse fixed URI: {e}"),
                 }
