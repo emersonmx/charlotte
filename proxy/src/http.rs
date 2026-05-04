@@ -1,7 +1,7 @@
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::{HeaderMap as HyperHeaderMap, Uri, body::Bytes};
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 pub(crate) trait BytesExt {
     fn boxed(self) -> BoxBody<Bytes, Error>;
@@ -156,52 +156,43 @@ impl Header {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct HeaderMap {
-    headers: Vec<Header>,
-    index_map: HashMap<String, Vec<usize>>,
-}
+pub struct HeaderMap(HyperHeaderMap);
 
 impl HeaderMap {
     pub fn new(headers: Vec<Header>) -> Self {
-        let mut index_map = HashMap::new();
-        for (i, header) in headers.iter().enumerate() {
-            index_map
-                .entry(header.key().to_lowercase())
-                .or_insert_with(Vec::new)
-                .push(i);
-        }
-        Self { headers, index_map }
+        Self(
+            headers
+                .into_iter()
+                .fold(HyperHeaderMap::new(), |mut map, header| {
+                    map.append(
+                        header.key().parse().unwrap_or_else(|_| {
+                            hyper::header::HeaderName::from_static("invalid-header-name")
+                        }),
+                        header.value().parse().unwrap_or_else(|_| {
+                            hyper::header::HeaderValue::from_static("invalid-header-value")
+                        }),
+                    );
+                    map
+                }),
+        )
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.index_map
-            .get(&key.to_lowercase())
-            .and_then(|indices| indices.first())
-            .map(|&i| self.headers[i].value())
+        self.0.get(key).and_then(|value| value.to_str().ok())
     }
 
     pub fn get_all(&self, key: &str) -> Vec<&str> {
-        self.index_map
-            .get(&key.to_lowercase())
-            .map(|indices| indices.iter().map(|&i| self.headers[i].value()).collect())
-            .unwrap_or_default()
+        self.0
+            .get_all(key)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .collect()
     }
 }
 
 impl From<HyperHeaderMap> for HeaderMap {
     fn from(headers: HyperHeaderMap) -> Self {
-        let headers_vec = headers
-            .iter()
-            .map(|(k, v)| {
-                Header(
-                    k.as_str().to_string(),
-                    v.to_str()
-                        .unwrap_or("<invalid UTF-8 in header value>")
-                        .to_string(),
-                )
-            })
-            .collect();
-        Self::new(headers_vec)
+        Self(headers)
     }
 }
 

@@ -43,12 +43,8 @@ pub enum Error {
     },
     #[error("Failed to accept connection: {0}")]
     AcceptConnection(#[source] BoxError),
-    #[error("{message} (uri: {uri}, headers: {headers:?})")]
-    TargetAddress {
-        message: String,
-        uri: String,
-        headers: HeaderMap,
-    },
+    #[error("Failed to determine target address from request: {0:?}")]
+    TargetAddress(Box<TargetAddressContextError>),
     #[error("Failed to fix relative URI: {0:?}")]
     FixRelativeUri(Box<RequestContextError>),
 
@@ -74,6 +70,13 @@ pub enum Error {
         #[source]
         source: BoxError,
     },
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TargetAddressContextError {
+    pub message: String,
+    pub uri: String,
+    pub headers: HeaderMap,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -548,21 +551,29 @@ fn get_host(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
     if let Some(host) = uri.host() {
         Ok(host.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
-            message: "Invalid HOST header format (not UTF-8)".to_string(),
-            uri: uri.to_string(),
-            headers: headers.clone().into(),
+        let host_str = host.to_str().map_err(|_| {
+            Error::TargetAddress(
+                TargetAddressContextError {
+                    message: "Invalid HOST header format (not UTF-8)".to_string(),
+                    uri: uri.to_string(),
+                    headers: headers.clone().into(),
+                }
+                .into(),
+            )
         })?;
         match host_str.rsplit_once(':') {
             Some((host, _)) => Ok(host.to_string()),
             None => Ok(host_str.to_string()),
         }
     } else {
-        Err(Error::TargetAddress {
-            message: "Missing host information in URI or Host header".to_string(),
-            uri: uri.to_string(),
-            headers: headers.clone().into(),
-        })
+        Err(Error::TargetAddress(
+            TargetAddressContextError {
+                message: "Missing host information in URI or Host header".to_string(),
+                uri: uri.to_string(),
+                headers: headers.clone().into(),
+            }
+            .into(),
+        ))
     }
 }
 
@@ -576,10 +587,15 @@ fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
         let port = uri.port_u16().unwrap_or(default_port);
         Ok(port.to_string())
     } else if let Some(host) = headers.get(hyper::header::HOST) {
-        let host_str = host.to_str().map_err(|_| Error::TargetAddress {
-            message: "Invalid HOST header format (not UTF-8)".to_string(),
-            uri: uri.to_string(),
-            headers: headers.clone().into(),
+        let host_str = host.to_str().map_err(|_| {
+            Error::TargetAddress(
+                TargetAddressContextError {
+                    message: "Invalid HOST header format (not UTF-8)".to_string(),
+                    uri: uri.to_string(),
+                    headers: headers.clone().into(),
+                }
+                .into(),
+            )
         })?;
         match host_str.rsplit_once(':') {
             Some((_, port_str)) => {
@@ -589,11 +605,14 @@ fn get_port(uri: &Uri, headers: &HyperHeaderMap) -> Result<String, Error> {
             None => Ok(default_port.to_string()),
         }
     } else {
-        Err(Error::TargetAddress {
-            message: "Missing port information in URI or Host header".to_string(),
-            uri: uri.to_string(),
-            headers: headers.clone().into(),
-        })
+        Err(Error::TargetAddress(
+            TargetAddressContextError {
+                message: "Missing port information in URI or Host header".to_string(),
+                uri: uri.to_string(),
+                headers: headers.clone().into(),
+            }
+            .into(),
+        ))
     }
 }
 
