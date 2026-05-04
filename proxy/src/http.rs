@@ -244,12 +244,11 @@ impl Request {
         parts: &hyper::http::request::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
-        let headers: HeaderMap = parts.headers.clone().into();
         let body = Self::read_body(parts, body).await?;
         Ok(Self {
             method: parts.method.clone().into(),
             url: parts.uri.clone().into(),
-            headers,
+            headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
     }
@@ -259,7 +258,6 @@ impl Request {
         B: hyper::body::Body,
         B::Error: std::fmt::Debug,
     {
-        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -269,7 +267,7 @@ impl Request {
                         method: parts.method.clone().into(),
                         uri: parts.uri.to_string(),
                         version: format!("{:?}", parts.version),
-                        headers: headers.clone(),
+                        headers: parts.headers.clone().into(),
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
@@ -306,11 +304,10 @@ impl Response {
         parts: &hyper::http::response::Parts,
         body: BoxBody<Bytes, Error>,
     ) -> Result<Self, Error> {
-        let headers: HeaderMap = parts.headers.clone().into();
         let body = Self::read_body(parts, body).await?;
         Ok(Self {
             status: parts.status.as_u16(),
-            headers,
+            headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
     }
@@ -320,7 +317,6 @@ impl Response {
         B: hyper::body::Body,
         B::Error: std::fmt::Debug,
     {
-        let headers: HeaderMap = parts.headers.clone().into();
         let body = body
             .collect()
             .await
@@ -329,7 +325,7 @@ impl Response {
                     ResponseContextError {
                         status: parts.status.as_u16(),
                         version: format!("{:?}", parts.version),
-                        headers: headers.clone(),
+                        headers: parts.headers.clone().into(),
                         extensions: format!("{:?}", parts.extensions),
                         message: format!("{e:?}"),
                     }
