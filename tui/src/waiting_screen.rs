@@ -49,10 +49,6 @@ impl Screen for WaitingScreen {
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         is_quit_key_event(&event)
     }
-
-    fn update(&mut self, _message: AppMessage) -> Option<AppMessage> {
-        None
-    }
 }
 
 #[cfg(test)]
