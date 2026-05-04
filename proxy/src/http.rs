@@ -89,56 +89,45 @@ impl From<hyper::Method> for Method {
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
-pub struct Url {
-    pub scheme: String,
-    pub host: String,
-    pub port: Option<u16>,
-    pub path: String,
-    pub query: Option<String>,
-}
+pub struct Url(Uri);
 
-impl Display for Url {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let port_part = if let Some(port) = self.port {
-            format!(":{port}")
-        } else {
-            "".to_string()
-        };
-        let query_part = if let Some(query) = &self.query {
-            format!("?{query}")
-        } else {
-            "".to_string()
-        };
-        write!(
-            f,
-            "{}://{}{}{}{}",
-            self.scheme, self.host, port_part, self.path, query_part
-        )
+impl Url {
+    pub fn scheme(&self) -> &str {
+        self.0.scheme_str().unwrap_or("http")
+    }
+
+    pub fn host(&self) -> Option<&str> {
+        self.0.host()
+    }
+
+    pub fn port(&self) -> Option<u16> {
+        self.0.port_u16()
+    }
+
+    pub fn path(&self) -> &str {
+        self.0.path()
+    }
+
+    pub fn query(&self) -> Option<&str> {
+        self.0.query()
     }
 }
 
 impl From<Uri> for Url {
     fn from(uri: Uri) -> Self {
-        let scheme = uri.scheme_str().unwrap_or("http").to_string();
-        let host = uri.host().unwrap_or("127.0.0.1").to_string();
-        let port = uri.port_u16();
-        let path = uri.path().to_string();
-        let query = uri.query().map(|q| q.to_string());
-
-        Self {
-            scheme,
-            host,
-            port,
-            path,
-            query,
-        }
+        Self(uri)
     }
 }
 
 impl From<&str> for Url {
     fn from(s: &str) -> Self {
-        let uri = s.parse::<Uri>().unwrap_or_else(|_| Uri::from_static("/"));
-        Self::from(uri)
+        Self(s.parse().unwrap_or_else(|_| Uri::from_static("/")))
+    }
+}
+
+impl Display for Url {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
