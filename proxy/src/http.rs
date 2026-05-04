@@ -41,50 +41,29 @@ pub struct ResponseContextError {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub enum Method {
-    #[default]
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Head,
-    Options,
-    Connect,
-    Trace,
-}
+pub struct Method(hyper::Method);
 
-impl Display for Method {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let method_str = match self {
-            Method::Get => "GET",
-            Method::Post => "POST",
-            Method::Put => "PUT",
-            Method::Patch => "PATCH",
-            Method::Delete => "DELETE",
-            Method::Head => "HEAD",
-            Method::Options => "OPTIONS",
-            Method::Connect => "CONNECT",
-            Method::Trace => "TRACE",
-        };
-        write!(f, "{method_str}")
-    }
+impl Method {
+    pub const GET: Method = Method(hyper::Method::GET);
+    pub const POST: Method = Method(hyper::Method::POST);
+    pub const PUT: Method = Method(hyper::Method::PUT);
+    pub const DELETE: Method = Method(hyper::Method::DELETE);
+    pub const HEAD: Method = Method(hyper::Method::HEAD);
+    pub const OPTIONS: Method = Method(hyper::Method::OPTIONS);
+    pub const CONNECT: Method = Method(hyper::Method::CONNECT);
+    pub const PATCH: Method = Method(hyper::Method::PATCH);
+    pub const TRACE: Method = Method(hyper::Method::TRACE);
 }
 
 impl From<hyper::Method> for Method {
     fn from(method: hyper::Method) -> Self {
-        match method {
-            hyper::Method::GET => Method::Get,
-            hyper::Method::POST => Method::Post,
-            hyper::Method::PUT => Method::Put,
-            hyper::Method::PATCH => Method::Patch,
-            hyper::Method::DELETE => Method::Delete,
-            hyper::Method::HEAD => Method::Head,
-            hyper::Method::OPTIONS => Method::Options,
-            hyper::Method::CONNECT => Method::Connect,
-            hyper::Method::TRACE => Method::Trace,
-            _ => Method::default(),
-        }
+        Self(method)
+    }
+}
+
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

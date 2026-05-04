@@ -331,7 +331,7 @@ mod tests {
     fn handle_store_request_message(mut app: App) {
         let request_id = RequestId::new(1);
         let request = Request {
-            method: Method::Get,
+            method: Method::GET,
             url: "http://example.com".into(),
             headers: HeaderMap::new(vec![]),
             body: Body::new(vec![]),
@@ -356,7 +356,7 @@ mod tests {
     fn handle_store_response_message(mut app: App) {
         let request_id = RequestId::new(1);
         let request = Request {
-            method: Method::Get,
+            method: Method::GET,
             url: "http://example.com".into(),
             headers: HeaderMap::new(vec![]),
             body: Body::new(vec![]),
