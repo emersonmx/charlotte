@@ -1,14 +1,7 @@
-pub(crate) use http_body_util::combinators::BoxBody;
+use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::{HeaderMap as HyperHeaderMap, Uri, body::Bytes};
 use std::{collections::HashMap, fmt::Display};
-
-pub(crate) type ClientBuilder = hyper::client::conn::http1::Builder;
-pub(crate) type ServerBuilder = hyper::server::conn::http1::Builder;
-pub(crate) type IncomingRequest = hyper::Request<hyper::body::Incoming>;
-pub(crate) type IncomingResponse = hyper::Response<hyper::body::Incoming>;
-pub(crate) type HyperRequest = hyper::Request<BoxBody<Bytes, Error>>;
-pub(crate) type HyperResponse = hyper::Response<BoxBody<Bytes, Error>>;
 
 pub(crate) trait BytesExt {
     fn boxed(self) -> BoxBody<Bytes, Error>;

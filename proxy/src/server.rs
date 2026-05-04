@@ -1,11 +1,8 @@
 use crate::{
     certs::CertificateStore,
-    http::{
-        self, BytesExt, ClientBuilder, HeaderMap, HyperRequest, HyperResponse, IncomingRequest,
-        IncomingResponse, Request, RequestContextError, Response, ServerBuilder,
-    },
+    http::{self, BytesExt, HeaderMap, Request, RequestContextError, Response},
 };
-use http_body_util::{BodyExt, Empty};
+use http_body_util::{BodyExt, Empty, combinators::BoxBody};
 use hyper::{
     HeaderMap as HyperHeaderMap, Uri, body::Bytes, header::HeaderValue, service::service_fn,
     upgrade::Upgraded,
@@ -29,6 +26,12 @@ use tokio_rustls::{
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
+type ClientBuilder = hyper::client::conn::http1::Builder;
+type ServerBuilder = hyper::server::conn::http1::Builder;
+type IncomingRequest = hyper::Request<hyper::body::Incoming>;
+type IncomingResponse = hyper::Response<hyper::body::Incoming>;
+type HyperRequest = hyper::Request<BoxBody<Bytes, http::Error>>;
+type HyperResponse = hyper::Response<BoxBody<Bytes, http::Error>>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
