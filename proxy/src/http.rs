@@ -186,7 +186,7 @@ impl Request {
         B::Error: std::fmt::Debug,
     {
         let (mut parts, body) = req.into_parts();
-        clean_request_headers(&mut parts.headers);
+        Self::clean_headers(&mut parts.headers);
         let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
@@ -202,6 +202,13 @@ impl Request {
             headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
+    }
+
+    fn clean_headers(headers: &mut HyperHeaderMap) {
+        headers.remove(hyper::header::CONNECTION);
+        headers.remove("proxy-connection");
+        headers.remove("keep-alive");
+        headers.remove(hyper::header::TRANSFER_ENCODING);
     }
 
     async fn read_body<B>(parts: &hyper::http::request::Parts, body: B) -> Result<Bytes, Error>
@@ -246,7 +253,7 @@ impl Response {
         B::Error: std::fmt::Debug,
     {
         let (mut parts, body) = res.into_parts();
-        clean_response_headers(&mut parts.headers);
+        Self::clean_headers(&mut parts.headers);
         let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
@@ -261,6 +268,11 @@ impl Response {
             headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
+    }
+
+    fn clean_headers(headers: &mut HyperHeaderMap) {
+        headers.remove(hyper::header::CONNECTION);
+        headers.remove(hyper::header::TRANSFER_ENCODING);
     }
 
     async fn read_body<B>(parts: &hyper::http::response::Parts, body: B) -> Result<Bytes, Error>
@@ -286,16 +298,4 @@ impl Response {
             .to_bytes();
         Ok(body)
     }
-}
-
-fn clean_request_headers(headers: &mut HyperHeaderMap) {
-    headers.remove(hyper::header::CONNECTION);
-    headers.remove("proxy-connection");
-    headers.remove("keep-alive");
-    headers.remove(hyper::header::TRANSFER_ENCODING);
-}
-
-fn clean_response_headers(headers: &mut HyperHeaderMap) {
-    headers.remove(hyper::header::CONNECTION);
-    headers.remove(hyper::header::TRANSFER_ENCODING);
 }
