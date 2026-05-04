@@ -55,6 +55,17 @@ impl Method {
     pub const CONNECT: Method = Method(hyper::Method::CONNECT);
     pub const PATCH: Method = Method(hyper::Method::PATCH);
     pub const TRACE: Method = Method(hyper::Method::TRACE);
+    pub const ALL: [Method; 9] = [
+        Self::GET,
+        Self::POST,
+        Self::PUT,
+        Self::DELETE,
+        Self::HEAD,
+        Self::OPTIONS,
+        Self::CONNECT,
+        Self::PATCH,
+        Self::TRACE,
+    ];
 }
 
 impl From<hyper::Method> for Method {
