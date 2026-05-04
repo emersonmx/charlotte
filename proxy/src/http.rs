@@ -15,6 +15,8 @@ impl BytesExt for Bytes {
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
+    #[error("Failed to convert value to string: {0}")]
+    ToString(#[source] hyper::header::ToStrError),
     #[error("Failed to read request body: {0:?}")]
     RequestBodyRead(Box<RequestContextError>),
     #[error("Failed to read response body: {0:?}")]
@@ -110,16 +112,16 @@ impl Display for Url {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Header(String, String);
+#[derive(Debug, Clone, PartialEq)]
+pub struct Header(hyper::header::HeaderName, hyper::header::HeaderValue);
 
 impl Header {
     pub fn key(&self) -> &str {
-        &self.0
+        self.0.as_str()
     }
 
-    pub fn value(&self) -> &str {
-        &self.1
+    pub fn value(&self) -> Result<&str, Error> {
+        self.1.to_str().map_err(Error::ToString)
     }
 }
 
@@ -128,21 +130,11 @@ pub struct HeaderMap(HyperHeaderMap);
 
 impl HeaderMap {
     pub fn new(headers: Vec<Header>) -> Self {
-        Self(
-            headers
-                .into_iter()
-                .fold(HyperHeaderMap::new(), |mut map, header| {
-                    map.append(
-                        header.key().parse().unwrap_or_else(|_| {
-                            hyper::header::HeaderName::from_static("invalid-header-name")
-                        }),
-                        header.value().parse().unwrap_or_else(|_| {
-                            hyper::header::HeaderValue::from_static("invalid-header-value")
-                        }),
-                    );
-                    map
-                }),
-        )
+        let mut map = HyperHeaderMap::new();
+        for header in headers {
+            map.append(header.0, header.1);
+        }
+        Self(map)
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
