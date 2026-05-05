@@ -6,6 +6,7 @@ use clap::Parser;
 mod app;
 mod cli;
 mod config;
+mod http_client_screen;
 mod requests_screen;
 mod waiting_screen;
 

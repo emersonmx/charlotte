@@ -2,10 +2,14 @@ use crate::app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_q
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint},
+    layout::{Alignment, Constraint, Direction::Vertical, Layout, Rect},
     style::{Style, palette::tailwind},
+    symbols::{self},
     text::Text,
-    widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
+        TableState,
+    },
 };
 
 #[derive(Debug, PartialEq)]
@@ -77,6 +81,16 @@ impl RequestTableColumnWidths {
         self.body = self.body.max(row.body.len() as u16);
         self.status = self.status.max(row.status.len() as u16);
     }
+
+    fn to_table_widths(&self) -> [Constraint; 5] {
+        [
+            Constraint::Length(self.request_id),
+            Constraint::Length(self.method),
+            Constraint::Length(self.url),
+            Constraint::Min(self.body),
+            Constraint::Length(self.status),
+        ]
+    }
 }
 
 pub struct RequestsScreen {
@@ -112,58 +126,6 @@ impl RequestsScreen {
 }
 
 impl RequestsScreen {
-    fn draw_table(&mut self, frame: &mut Frame) {
-        let header = RequestEntryRow {
-            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
-            method: Self::TABLE_COLUMN_METHOD.to_string(),
-            url: Self::TABLE_COLUMN_URL.to_string(),
-            body: Self::TABLE_COLUMN_BODY.to_string(),
-            status: Self::TABLE_COLUMN_STATUS.to_string(),
-        };
-        let rows = match self.request_store.lock() {
-            Ok(store) => store
-                .values()
-                .map(RequestEntryRow::from)
-                .map(Row::from)
-                .collect(),
-            Err(_) => vec![],
-        };
-
-        let table = Table::default()
-            .header(header.into())
-            .widths([
-                Constraint::Length(self.column_widths.request_id),
-                Constraint::Length(self.column_widths.method),
-                Constraint::Length(self.column_widths.url),
-                Constraint::Min(self.column_widths.body),
-                Constraint::Length(self.column_widths.status),
-            ])
-            .column_spacing(1)
-            .rows(rows)
-            .row_highlight_style(
-                Style::default()
-                    .bg(tailwind::GRAY.c100)
-                    .fg(tailwind::GRAY.c900),
-            );
-
-        let mut area = frame.area();
-        area.width = area.width.saturating_sub(1);
-        frame.render_stateful_widget(table, area, &mut self.table_state);
-    }
-
-    fn draw_scrollbar(&mut self, frame: &mut Frame) {
-        let mut area = frame.area();
-        area.y += area.y.saturating_add(1);
-        area.height = area.height.saturating_sub(1);
-        frame.render_stateful_widget(
-            Scrollbar::default()
-                .orientation(ScrollbarOrientation::VerticalRight)
-                .style(tailwind::GRAY.c400),
-            area,
-            &mut self.table_scroll_state,
-        );
-    }
-
     fn update_table_state(&mut self, row: RequestEntryRow) {
         self.column_widths.update(row);
 
@@ -195,8 +157,60 @@ impl RequestsScreen {
 
 impl Screen for RequestsScreen {
     fn draw(&mut self, frame: &mut Frame) {
-        self.draw_table(frame);
-        self.draw_scrollbar(frame);
+        let layout = Layout::default()
+            .direction(Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(3)]);
+        let [header_layout, rows_layout] = frame.area().layout(&layout);
+        let table_widths = self.column_widths.to_table_widths();
+
+        let header = RequestEntryRow {
+            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
+            method: Self::TABLE_COLUMN_METHOD.to_string(),
+            url: Self::TABLE_COLUMN_URL.to_string(),
+            body: Self::TABLE_COLUMN_BODY.to_string(),
+            status: Self::TABLE_COLUMN_STATUS.to_string(),
+        };
+        let border_set = symbols::border::Set {
+            bottom_left: symbols::line::VERTICAL_RIGHT,
+            bottom_right: symbols::line::VERTICAL_LEFT,
+            ..symbols::border::PLAIN
+        };
+        let table = Table::default()
+            .header(header.into())
+            .block(Block::bordered().border_set(border_set))
+            .widths(table_widths);
+        frame.render_widget(table, header_layout);
+
+        let rows = match self.request_store.lock() {
+            Ok(store) => store
+                .values()
+                .map(RequestEntryRow::from)
+                .map(Row::from)
+                .collect(),
+            Err(_) => vec![],
+        };
+        let table = Table::default()
+            .rows(rows)
+            .block(Block::bordered().borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT))
+            .widths(table_widths)
+            .row_highlight_style(
+                Style::default()
+                    .bg(tailwind::GRAY.c100)
+                    .fg(tailwind::GRAY.c900),
+            );
+        frame.render_stateful_widget(table, rows_layout, &mut self.table_state);
+
+        let area = Rect {
+            height: rows_layout.height - 1,
+            ..rows_layout
+        };
+        frame.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .style(tailwind::GRAY.c400),
+            area,
+            &mut self.table_scroll_state,
+        );
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
@@ -208,6 +222,15 @@ impl Screen for RequestsScreen {
             match key_event.code {
                 KeyCode::Up | KeyCode::Char('k') => return Some(Message::SelectPreviousRow.into()),
                 KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
+                KeyCode::Enter | KeyCode::Char('l') => {
+                    let selected = self.table_state.selected()?;
+                    let request_entry = match self.request_store.lock() {
+                        Ok(store) => store.values().nth(selected).cloned(),
+                        Err(_) => return None,
+                    };
+
+                    return Some(AppMessage::ShowHttpClientScreen(Box::new(request_entry)));
+                }
                 _ => {}
             }
         }

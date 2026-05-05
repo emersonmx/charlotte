@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    http_client_screen::{HttpClientScreen, Message as HttpClientScreenMessage},
     requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
     waiting_screen::WaitingScreen,
 };
@@ -22,20 +23,24 @@ use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
+    ShowHttpClientScreen(Box<Option<RequestEntry>>),
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
     Quit,
     RequestsScreen(RequestsScreenMessage),
+    HttpClientScreen(HttpClientScreenMessage),
 }
 
 pub trait Screen {
     fn draw(&mut self, frame: &mut Frame) {
         let _ = frame;
     }
+
     fn handle_event(&self, event: Event) -> Option<Message> {
         let _ = event;
         None
     }
+
     fn update(&mut self, message: Message) -> Option<Message> {
         let _ = message;
         None
@@ -223,6 +228,9 @@ impl App {
 
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
+            Message::ShowHttpClientScreen(request_entry) => {
+                self.show_http_client_screen(*request_entry)
+            }
             Message::StoreRequest(message) => {
                 let (request_id, request) = *message;
                 self.store_request(request_id, request)
@@ -236,19 +244,14 @@ impl App {
         }
     }
 
-    fn make_requests_screen(&mut self) -> Box<dyn Screen> {
-        Box::new(RequestsScreen::new(self.request_store.clone()))
-    }
-
-    fn quit(&mut self) -> Option<Message> {
-        self.running = false;
-        self.abort_server_tx.take().map(|tx| tx.send(()));
+    fn show_http_client_screen(&mut self, request_entry: Option<RequestEntry>) -> Option<Message> {
+        self.screen = Box::new(HttpClientScreen::new(request_entry));
         None
     }
 
     fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
         if self.waiting_messages {
-            self.screen = self.make_requests_screen();
+            self.screen = Box::new(RequestsScreen::new(self.request_store.clone()));
             self.waiting_messages = false;
         }
 
@@ -287,6 +290,12 @@ impl App {
             }
             Err(_) => Some(Message::Quit),
         }
+    }
+
+    fn quit(&mut self) -> Option<Message> {
+        self.running = false;
+        self.abort_server_tx.take().map(|tx| tx.send(()));
+        None
     }
 }
 

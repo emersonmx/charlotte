@@ -159,6 +159,12 @@ impl HeaderMap {
             .filter_map(|value| value.to_str().ok())
             .collect()
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = Header> + '_ {
+        self.0
+            .iter()
+            .map(|(key, value)| Header(key.clone(), value.clone()))
+    }
 }
 
 impl From<HyperHeaderMap> for HeaderMap {
