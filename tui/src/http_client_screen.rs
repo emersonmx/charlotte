@@ -4,6 +4,8 @@ use proxy::http::HeaderMap;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
+    style::{Style, palette::tailwind},
+    text::{Line, Span},
     widgets::{Block, Cell, Paragraph, Row, Table},
 };
 use std::fmt::Display;
@@ -12,6 +14,8 @@ use std::fmt::Display;
 pub enum Message {
     NextTab,
     PreviousTab,
+    NextSection,
+    PreviousSection,
 }
 
 impl From<Message> for AppMessage {
@@ -44,9 +48,60 @@ impl Display for Tab {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+enum RequestSection {
+    #[default]
+    QueryParams,
+    Headers,
+    Body,
+}
+
+impl RequestSection {
+    fn next(&mut self) {
+        *self = match self {
+            RequestSection::QueryParams => RequestSection::Headers,
+            RequestSection::Headers => RequestSection::Body,
+            RequestSection::Body => RequestSection::QueryParams,
+        };
+    }
+
+    fn previous(&mut self) {
+        *self = match self {
+            RequestSection::QueryParams => RequestSection::Body,
+            RequestSection::Headers => RequestSection::QueryParams,
+            RequestSection::Body => RequestSection::Headers,
+        };
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+enum ResponseSection {
+    #[default]
+    Headers,
+    Body,
+}
+
+impl ResponseSection {
+    fn next(&mut self) {
+        *self = match self {
+            ResponseSection::Headers => ResponseSection::Body,
+            ResponseSection::Body => ResponseSection::Headers,
+        };
+    }
+
+    fn previous(&mut self) {
+        *self = match self {
+            ResponseSection::Headers => ResponseSection::Body,
+            ResponseSection::Body => ResponseSection::Headers,
+        };
+    }
+}
+
 pub struct HttpClientScreen {
     request_entry: Option<RequestEntry>,
     tab_selected: Tab,
+    request_section_selected: RequestSection,
+    response_section_selected: ResponseSection,
 }
 
 impl HttpClientScreen {
@@ -60,6 +115,8 @@ impl HttpClientScreen {
         Self {
             request_entry,
             tab_selected: Tab::Request,
+            request_section_selected: RequestSection::default(),
+            response_section_selected: ResponseSection::default(),
         }
     }
 
@@ -97,9 +154,19 @@ impl HttpClientScreen {
                 Some(Row::new(vec![Cell::from(key), Cell::from(value)]))
             })
             .collect();
+        let mut title = Line::from(format!(" {} ", Self::QUERY_PARAMS_LABEL));
+        if self.tab_selected == Tab::Request
+            && self.request_section_selected == RequestSection::QueryParams
+        {
+            title = title.style(
+                Style::default()
+                    .bg(tailwind::GRAY.c100)
+                    .fg(tailwind::GRAY.c900),
+            );
+        }
         let params_table = Table::default()
             .rows(params)
-            .block(Block::bordered().title(format!(" {} ", Self::QUERY_PARAMS_LABEL)))
+            .block(Block::bordered().title(title))
             .widths(vec![
                 Constraint::Length(width[0]),
                 Constraint::Min(width[1]),
@@ -120,9 +187,21 @@ impl HttpClientScreen {
                 Row::new(vec![Cell::from(key), Cell::from(value)])
             })
             .collect();
+        let mut title = Line::from(format!(" {} ", Self::HEADERS_LABEL));
+        let section_selected = match self.tab_selected {
+            Tab::Request => self.request_section_selected == RequestSection::Headers,
+            Tab::Response => self.response_section_selected == ResponseSection::Headers,
+        };
+        if section_selected {
+            title = title.style(
+                Style::default()
+                    .bg(tailwind::GRAY.c100)
+                    .fg(tailwind::GRAY.c900),
+            );
+        }
         let header_table = Table::default()
             .rows(headers)
-            .block(Block::bordered().title(format!(" {} ", Self::HEADERS_LABEL)))
+            .block(Block::bordered().title(title))
             .widths(vec![
                 Constraint::Length(widths[0]),
                 Constraint::Min(widths[1]),
@@ -132,9 +211,21 @@ impl HttpClientScreen {
     }
 
     fn draw_body(&self, frame: &mut Frame, area: Rect, body: &[u8]) {
+        let section_selected = match self.tab_selected {
+            Tab::Request => self.request_section_selected == RequestSection::Body,
+            Tab::Response => self.response_section_selected == ResponseSection::Body,
+        };
+        let mut title = Line::from(format!(" {} ", Self::BODY_LABEL));
+        if section_selected {
+            title = title.style(
+                Style::default()
+                    .bg(tailwind::GRAY.c100)
+                    .fg(tailwind::GRAY.c900),
+            );
+        }
+
         let body_string = String::from_utf8_lossy(body);
-        let paragraph = Paragraph::new(body_string)
-            .block(Block::bordered().title(format!(" {} ", Self::BODY_LABEL)));
+        let paragraph = Paragraph::new(body_string).block(Block::bordered().title(title));
         frame.render_widget(paragraph, area);
     }
 }
@@ -156,17 +247,25 @@ impl Screen for HttpClientScreen {
 
         self.draw_method_url(frame, method_url_area, request_entry);
 
-        let tab_titles: Vec<String> = [Tab::Request, Tab::Response]
+        let tab_titles: Vec<Span> = [Tab::Request, Tab::Response]
             .iter()
             .map(|tab| {
                 if self.tab_selected == *tab {
-                    format!("[{tab}]")
+                    Span::styled(
+                        format!(" {tab} "),
+                        Style::default()
+                            .bg(tailwind::GRAY.c100)
+                            .fg(tailwind::GRAY.c900),
+                    )
                 } else {
-                    format!(" {tab} ")
+                    Span::styled(format!(" {tab} "), Style::reset())
                 }
             })
             .collect();
-        let tabs = Block::bordered().title(format!(" {} ", tab_titles.join("")));
+
+        let title = Line::from(tab_titles);
+        let tabs = Block::bordered().title(title);
+        frame.render_widget(tabs, tabbed_pane_area);
 
         match self.tab_selected {
             Tab::Request => {
@@ -184,7 +283,6 @@ impl Screen for HttpClientScreen {
                     })
                     .layout(&layout);
 
-                frame.render_widget(tabs, tabbed_pane_area);
                 self.draw_query_params(frame, params_area, request_entry);
                 self.draw_headers(frame, headers_area, request_entry.request.headers.clone());
                 self.draw_body(frame, body_area, request_entry.request.body.as_bytes());
@@ -199,8 +297,6 @@ impl Screen for HttpClientScreen {
                         horizontal: 1,
                     })
                     .layout(&layout);
-
-                frame.render_widget(tabs, tabbed_pane_area);
 
                 let headers = match &request_entry.response {
                     Some(response) => response.headers.clone(),
@@ -227,11 +323,17 @@ impl Screen for HttpClientScreen {
 
         if let Event::Key(key_event) = event {
             match key_event.code {
-                KeyCode::Char('[') => {
+                KeyCode::Char('h') => {
                     return Some(Message::PreviousTab.into());
                 }
-                KeyCode::Char(']') => {
+                KeyCode::Char('l') => {
                     return Some(Message::NextTab.into());
+                }
+                KeyCode::Char('j') => {
+                    return Some(Message::NextSection.into());
+                }
+                KeyCode::Char('k') => {
+                    return Some(Message::PreviousSection.into());
                 }
                 _ => {}
             }
@@ -250,6 +352,14 @@ impl Screen for HttpClientScreen {
             Message::PreviousTab | Message::NextTab => {
                 self.tab_selected.toggle();
             }
+            Message::NextSection => match self.tab_selected {
+                Tab::Request => self.request_section_selected.next(),
+                Tab::Response => self.response_section_selected.next(),
+            },
+            Message::PreviousSection => match self.tab_selected {
+                Tab::Request => self.request_section_selected.previous(),
+                Tab::Response => self.response_section_selected.previous(),
+            },
         }
 
         None
