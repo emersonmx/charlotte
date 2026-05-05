@@ -271,11 +271,6 @@ impl App {
     }
 
     fn store_response(&mut self, request_id: RequestId, response: Response) -> Option<Message> {
-        if self.waiting_messages {
-            self.screen = self.make_requests_screen();
-            self.waiting_messages = false;
-        }
-
         match self.request_store.lock() {
             Ok(mut store) => {
                 if let Some(request_entry) = store.get_mut(&request_id) {
