@@ -2,7 +2,7 @@ use crate::app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_q
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Margin},
+    layout::{Alignment, Constraint},
     style::{Style, palette::tailwind},
     text::Text,
     widgets::{Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
@@ -146,18 +146,20 @@ impl RequestsScreen {
                     .fg(tailwind::GRAY.c900),
             );
 
-        frame.render_stateful_widget(table, frame.area(), &mut self.table_state);
+        let mut area = frame.area();
+        area.width = area.width.saturating_sub(1);
+        frame.render_stateful_widget(table, area, &mut self.table_state);
     }
 
     fn draw_scrollbar(&mut self, frame: &mut Frame) {
+        let mut area = frame.area();
+        area.y += area.y.saturating_add(1);
+        area.height = area.height.saturating_sub(1);
         frame.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .style(tailwind::GRAY.c400),
-            frame.area().inner(Margin {
-                vertical: 1,
-                horizontal: 0,
-            }),
+            area,
             &mut self.table_scroll_state,
         );
     }
