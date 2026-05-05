@@ -243,7 +243,7 @@ impl Screen for HttpClientScreen {
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
         let message = match message {
             AppMessage::HttpClientScreen(message) => message,
-            _ => return Some(message),
+            _ => return None,
         };
 
         match message {

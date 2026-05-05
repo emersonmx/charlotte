@@ -241,7 +241,7 @@ impl Screen for RequestsScreen {
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
         let message = match message {
             AppMessage::RequestsScreen(message) => message,
-            message => return Some(message),
+            _ => return None,
         };
 
         match message {
@@ -249,6 +249,7 @@ impl Screen for RequestsScreen {
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
         }
+
         None
     }
 }
