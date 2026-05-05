@@ -323,16 +323,16 @@ impl Screen for HttpClientScreen {
 
         if let Event::Key(key_event) = event {
             match key_event.code {
-                KeyCode::Char('h') => {
+                KeyCode::Left | KeyCode::Char('h') => {
                     return Some(Message::PreviousTab.into());
                 }
-                KeyCode::Char('l') => {
+                KeyCode::Right | KeyCode::Char('l') => {
                     return Some(Message::NextTab.into());
                 }
-                KeyCode::Char('j') => {
+                KeyCode::Down | KeyCode::Char('j') => {
                     return Some(Message::NextSection.into());
                 }
-                KeyCode::Char('k') => {
+                KeyCode::Up | KeyCode::Char('k') => {
                     return Some(Message::PreviousSection.into());
                 }
                 _ => {}
