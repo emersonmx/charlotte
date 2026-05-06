@@ -26,7 +26,6 @@ pub enum Message {
     ShowHttpClientScreen(Box<Option<RequestEntry>>),
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
-    SetSelectedRequestEntry(usize),
     Quit,
     RequestsScreen(RequestsScreenMessage),
     HttpClientScreen(HttpClientScreenMessage),
@@ -63,7 +62,6 @@ pub struct App {
     message_rx: Option<mpsc::Receiver<ProxyMessage>>,
     config: Config,
     screen: Box<dyn Screen>,
-    selected_request_entry: Option<usize>,
     running: bool,
     exit_error: Option<anyhow::Error>,
     waiting_messages: bool,
@@ -84,7 +82,6 @@ impl App {
             message_rx: None,
             config,
             screen,
-            selected_request_entry: None,
             running: true,
             exit_error: None,
             waiting_messages: true,
@@ -242,7 +239,6 @@ impl App {
                 let (request_id, response) = *message;
                 self.store_response(request_id, response)
             }
-            Message::SetSelectedRequestEntry(selected) => self.set_selected_request_entry(selected),
             Message::Quit => self.quit(),
             message => self.screen.update(message),
         }
@@ -294,11 +290,6 @@ impl App {
             }
             Err(_) => Some(Message::Quit),
         }
-    }
-
-    fn set_selected_request_entry(&mut self, selected: usize) -> Option<Message> {
-        self.selected_request_entry = Some(selected);
-        None
     }
 
     fn quit(&mut self) -> Option<Message> {

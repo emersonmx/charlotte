@@ -142,17 +142,13 @@ impl RequestsScreen {
     fn select_previous_row(&mut self) -> Option<AppMessage> {
         self.table_state.select_previous();
         self.table_scroll_state.prev();
-        self.table_state
-            .selected()
-            .map(AppMessage::SetSelectedRequestEntry)
+        None
     }
 
     fn select_next_row(&mut self) -> Option<AppMessage> {
         self.table_state.select_next();
         self.table_scroll_state.next();
-        self.table_state
-            .selected()
-            .map(AppMessage::SetSelectedRequestEntry)
+        None
     }
 
     fn requests_length(&self) -> usize {
