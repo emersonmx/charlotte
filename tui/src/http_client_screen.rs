@@ -228,6 +228,27 @@ impl HttpClientScreen {
         let paragraph = Paragraph::new(body_string).block(Block::bordered().title(title));
         frame.render_widget(paragraph, area);
     }
+
+    fn update_tab_selected(&mut self) -> Option<AppMessage> {
+        self.tab_selected.toggle();
+        None
+    }
+
+    fn update_next_section(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => self.request_section_selected.next(),
+            Tab::Response => self.response_section_selected.next(),
+        }
+        None
+    }
+
+    fn update_previous_section(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => self.request_section_selected.previous(),
+            Tab::Response => self.response_section_selected.previous(),
+        }
+        None
+    }
 }
 
 impl Screen for HttpClientScreen {
@@ -349,19 +370,9 @@ impl Screen for HttpClientScreen {
         };
 
         match message {
-            Message::PreviousTab | Message::NextTab => {
-                self.tab_selected.toggle();
-            }
-            Message::NextSection => match self.tab_selected {
-                Tab::Request => self.request_section_selected.next(),
-                Tab::Response => self.response_section_selected.next(),
-            },
-            Message::PreviousSection => match self.tab_selected {
-                Tab::Request => self.request_section_selected.previous(),
-                Tab::Response => self.response_section_selected.previous(),
-            },
+            Message::PreviousTab | Message::NextTab => self.update_tab_selected(),
+            Message::NextSection => self.update_next_section(),
+            Message::PreviousSection => self.update_previous_section(),
         }
-
-        None
     }
 }
