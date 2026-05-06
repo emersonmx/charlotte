@@ -8,6 +8,7 @@ mod cli;
 mod config;
 mod http_client_screen;
 mod requests_screen;
+mod theme;
 mod waiting_screen;
 
 #[tokio::main]

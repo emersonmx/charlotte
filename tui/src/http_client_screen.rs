@@ -1,10 +1,12 @@
-use crate::app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event};
+use crate::{
+    app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
+    theme,
+};
 use crossterm::event::{Event, KeyCode};
 use proxy::http::HeaderMap;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Style, palette::tailwind},
     symbols,
     text::{Line, Span},
     widgets::{Block, Cell, Paragraph, Row, Table},
@@ -157,7 +159,7 @@ impl HttpClientScreen {
             Self::METHOD_LABEL
         ));
         if self.section_selected == Section::Method {
-            block = block.style(Style::default().fg(tailwind::BLUE.c400));
+            block = block.style(theme::styles::highlight_fg());
         }
 
         let paragraph = Paragraph::new(text).block(block);
@@ -176,7 +178,7 @@ impl HttpClientScreen {
             Self::URL_LABEL
         ));
         if self.section_selected == Section::Url {
-            block = block.style(Style::default().fg(tailwind::BLUE.c400));
+            block = block.style(theme::styles::highlight_fg());
         }
 
         let paragraph = Paragraph::new(text).block(block);
@@ -189,14 +191,9 @@ impl HttpClientScreen {
             .iter()
             .map(|tab| {
                 if self.tab_selected == *tab {
-                    Span::styled(
-                        format!(" {tab} "),
-                        Style::default()
-                            .bg(tailwind::GRAY.c100)
-                            .fg(tailwind::GRAY.c900),
-                    )
+                    Span::styled(format!(" {tab} "), theme::styles::highlight_fg())
                 } else {
-                    Span::styled(format!(" {tab} "), Style::reset())
+                    Span::styled(format!(" {tab} "), theme::styles::reset())
                 }
             })
             .collect();
@@ -233,7 +230,7 @@ impl HttpClientScreen {
         ));
         let mut block = Block::bordered().title(title);
         if self.section_selected == Section::QueryParams {
-            block = block.style(Style::default().fg(tailwind::BLUE.c400));
+            block = block.style(theme::styles::highlight_fg());
         }
         let params_table = Table::default()
             .rows(params)
@@ -266,7 +263,7 @@ impl HttpClientScreen {
         ));
         let mut block = Block::bordered().title(title);
         if self.section_selected == Section::Headers {
-            block = block.style(Style::default().fg(tailwind::BLUE.c400));
+            block = block.style(theme::styles::highlight_fg());
         }
         let header_table = Table::default()
             .rows(headers)
@@ -289,7 +286,7 @@ impl HttpClientScreen {
         let body_string = String::from_utf8_lossy(body);
         let mut block = Block::bordered().title(title);
         if self.section_selected == Section::Body {
-            block = block.style(Style::default().fg(tailwind::BLUE.c400));
+            block = block.style(theme::styles::highlight_fg());
         }
         let paragraph = Paragraph::new(body_string).block(block);
         frame.render_widget(paragraph, area);

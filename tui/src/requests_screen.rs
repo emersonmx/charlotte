@@ -1,9 +1,11 @@
-use crate::app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event};
+use crate::{
+    app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event},
+    theme,
+};
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction::Vertical, Layout, Rect},
-    style::{Style, palette::tailwind},
     symbols::{self},
     text::Text,
     widgets::{
@@ -197,11 +199,7 @@ impl Screen for RequestsScreen {
             .rows(rows)
             .block(Block::bordered().borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT))
             .widths(table_widths)
-            .row_highlight_style(
-                Style::default()
-                    .bg(tailwind::GRAY.c100)
-                    .fg(tailwind::GRAY.c900),
-            );
+            .row_highlight_style(theme::styles::highlight());
         frame.render_stateful_widget(table, rows_layout, &mut self.table_state);
 
         let area = Rect {
@@ -211,7 +209,7 @@ impl Screen for RequestsScreen {
         frame.render_stateful_widget(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
-                .style(tailwind::GRAY.c400),
+                .style(theme::styles::reset()),
             area,
             &mut self.table_scroll_state,
         );
