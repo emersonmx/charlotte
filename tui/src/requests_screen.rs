@@ -246,8 +246,18 @@ impl Screen for RequestsScreen {
 
         match message {
             Message::UpdateTableState(row) => self.update_table_state(*row),
-            Message::SelectPreviousRow => self.select_previous_row(),
-            Message::SelectNextRow => self.select_next_row(),
+            Message::SelectPreviousRow => {
+                self.select_previous_row();
+                if let Some(selected) = self.table_state.selected() {
+                    return Some(AppMessage::SetSelectedRequestEntry(selected));
+                }
+            }
+            Message::SelectNextRow => {
+                self.select_next_row();
+                if let Some(selected) = self.table_state.selected() {
+                    return Some(AppMessage::SetSelectedRequestEntry(selected));
+                }
+            }
         }
 
         None
