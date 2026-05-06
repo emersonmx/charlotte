@@ -126,7 +126,7 @@ impl RequestsScreen {
 }
 
 impl RequestsScreen {
-    fn update_table_state(&mut self, row: RequestEntryRow) {
+    fn update_table_state(&mut self, row: RequestEntryRow) -> Option<AppMessage> {
         self.column_widths.update(row);
 
         if self.table_state.selected().is_none() {
@@ -135,16 +135,24 @@ impl RequestsScreen {
         self.table_scroll_state = self
             .table_scroll_state
             .content_length(self.requests_length());
+
+        None
     }
 
-    fn select_previous_row(&mut self) {
+    fn select_previous_row(&mut self) -> Option<AppMessage> {
         self.table_state.select_previous();
         self.table_scroll_state.prev();
+        self.table_state
+            .selected()
+            .map(AppMessage::SetSelectedRequestEntry)
     }
 
-    fn select_next_row(&mut self) {
+    fn select_next_row(&mut self) -> Option<AppMessage> {
         self.table_state.select_next();
         self.table_scroll_state.next();
+        self.table_state
+            .selected()
+            .map(AppMessage::SetSelectedRequestEntry)
     }
 
     fn requests_length(&self) -> usize {
@@ -246,20 +254,8 @@ impl Screen for RequestsScreen {
 
         match message {
             Message::UpdateTableState(row) => self.update_table_state(*row),
-            Message::SelectPreviousRow => {
-                self.select_previous_row();
-                if let Some(selected) = self.table_state.selected() {
-                    return Some(AppMessage::SetSelectedRequestEntry(selected));
-                }
-            }
-            Message::SelectNextRow => {
-                self.select_next_row();
-                if let Some(selected) = self.table_state.selected() {
-                    return Some(AppMessage::SetSelectedRequestEntry(selected));
-                }
-            }
+            Message::SelectPreviousRow => self.select_previous_row(),
+            Message::SelectNextRow => self.select_next_row(),
         }
-
-        None
     }
 }
