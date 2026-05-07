@@ -589,7 +589,7 @@ impl Screen for HttpClientScreen {
                 Constraint::Min(3),
                 Constraint::Length(3),
             ]);
-        let [method_url_area, tabbed_pane_area, status_area] = frame.area().layout(&layout);
+        let [method_url_area, tabbed_pane_area, status_bar_area] = frame.area().layout(&layout);
 
         self.draw_method_url(frame, method_url_area);
 
@@ -648,7 +648,7 @@ impl Screen for HttpClientScreen {
             }
         }
 
-        self.draw_status_bar(frame, status_area);
+        self.draw_status_bar(frame, status_bar_area);
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {

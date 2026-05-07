@@ -1,6 +1,7 @@
 use crate::{
     app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event},
     theme,
+    widgets::BorderedText,
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
@@ -163,10 +164,12 @@ impl RequestsScreen {
 
 impl Screen for RequestsScreen {
     fn draw(&mut self, frame: &mut Frame) {
-        let layout = Layout::default()
-            .direction(Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(3)]);
-        let [header_layout, rows_layout] = frame.area().layout(&layout);
+        let layout = Layout::default().direction(Vertical).constraints([
+            Constraint::Length(3),
+            Constraint::Min(3),
+            Constraint::Length(3),
+        ]);
+        let [header_layout, rows_layout, status_area] = frame.area().layout(&layout);
         let table_widths = self.column_widths.to_table_widths();
 
         let header = RequestEntryRow {
@@ -213,6 +216,11 @@ impl Screen for RequestsScreen {
             area,
             &mut self.table_scroll_state,
         );
+
+        let status_bar_text = BorderedText::new(
+            "Press 'q' to quit, 'j'/'k' or arrow keys to navigate, 'l' or Enter to view details",
+        );
+        frame.render_widget(status_bar_text, status_area);
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
