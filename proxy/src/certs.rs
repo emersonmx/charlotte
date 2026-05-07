@@ -47,14 +47,15 @@ impl CertificateStore {
         })
     }
 
-    pub fn from_files(ca_cert_path: &Path, ca_key_path: &Path) -> Result<Self, BoxError> {
-        let ca_cert_bytes = std::fs::read(ca_cert_path).map_err(|e| {
+    pub async fn from_files(ca_cert_path: &Path, ca_key_path: &Path) -> Result<Self, BoxError> {
+        let ca_cert_bytes = tokio::fs::read(ca_cert_path).await.map_err(|e| {
             format!(
                 "Failed to read CA certificate from {:?}: {e}",
                 &ca_cert_path
             )
         })?;
-        let ca_key_bytes = std::fs::read(ca_key_path)
+        let ca_key_bytes = tokio::fs::read(ca_key_path)
+            .await
             .map_err(|e| format!("Failed to read CA key from {:?}: {e}", &ca_key_path))?;
         Self::new(&ca_cert_bytes, &ca_key_bytes)
     }

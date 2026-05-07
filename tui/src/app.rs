@@ -13,12 +13,14 @@ use proxy::{
 use ratatui::{DefaultTerminal, Frame};
 use std::{
     collections::BTreeMap,
-    io::Write,
     net::SocketAddr,
     ops::Deref,
     sync::{Arc, Mutex},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::{mpsc, oneshot},
+};
 use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq)]
@@ -99,7 +101,7 @@ impl App {
 
         let server_addr: SocketAddr =
             format!("{}:{}", self.config.server_host, self.config.server_port).parse()?;
-        let certificate_store = self.load_certificate_store()?;
+        let certificate_store = self.load_certificate_store().await?;
         let server = ProxyServer::new(server_addr, certificate_store, message_tx);
         let server_handle = tokio::spawn(async move {
             let result = server.run(abort_server_rx).await;
@@ -121,14 +123,16 @@ impl App {
         self.exit_error.take().map_or(Ok(()), Err)
     }
 
-    fn load_certificate_store(&self) -> anyhow::Result<CertificateStore> {
-        std::fs::create_dir_all(&self.config.certs_dir).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to create certificates directory '{}': {}",
-                self.config.certs_dir.display(),
-                e
-            )
-        })?;
+    async fn load_certificate_store(&self) -> anyhow::Result<CertificateStore> {
+        tokio::fs::create_dir_all(&self.config.certs_dir)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to create certificates directory '{}': {}",
+                    self.config.certs_dir.display(),
+                    e
+                )
+            })?;
 
         if !self.config.certs_dir.join("ca.crt").exists()
             || !self.config.certs_dir.join("ca.key").exists()
@@ -140,18 +144,19 @@ impl App {
                 .map_err(|e| anyhow::anyhow!("Failed to generate certificate: {}", e))?;
 
             let certs_path = self.config.certs_dir.clone();
-            let mut cert_file_der = std::fs::File::create(certs_path.join("ca.crt"))?;
-            cert_file_der.write_all(cert.der())?;
-            let mut cert_file_pem = std::fs::File::create(certs_path.join("ca.pem"))?;
-            cert_file_pem.write_all(cert.pem().as_bytes())?;
-            let mut keypair_file = std::fs::File::create(certs_path.join("ca.key"))?;
-            keypair_file.write_all(key_pair.serialized_der())?;
+            let mut cert_file_der = tokio::fs::File::create(certs_path.join("ca.crt")).await?;
+            cert_file_der.write_all(cert.der()).await?;
+            let mut cert_file_pem = tokio::fs::File::create(certs_path.join("ca.pem")).await?;
+            cert_file_pem.write_all(cert.pem().as_bytes()).await?;
+            let mut keypair_file = tokio::fs::File::create(certs_path.join("ca.key")).await?;
+            keypair_file.write_all(key_pair.serialized_der()).await?;
         }
 
         CertificateStore::from_files(
             &self.config.certs_dir.join("ca.crt"),
             &self.config.certs_dir.join("ca.key"),
         )
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to load certificate and key: {}", e))
     }
 
