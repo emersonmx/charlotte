@@ -10,6 +10,7 @@ mod http_client_screen;
 mod requests_screen;
 mod theme;
 mod waiting_screen;
+mod widgets;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

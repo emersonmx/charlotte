@@ -88,6 +88,22 @@ impl Url {
         self.0.scheme_str().unwrap_or("http")
     }
 
+    pub fn authority(&self) -> Option<&str> {
+        self.0.authority().map(|a| a.as_str())
+    }
+
+    pub fn username(&self) -> Option<&str> {
+        self.authority()
+            .and_then(|auth| auth.split('@').next())
+            .and_then(|user_info| user_info.split(':').next())
+    }
+
+    pub fn password(&self) -> Option<&str> {
+        self.authority()
+            .and_then(|auth| auth.split('@').next())
+            .and_then(|user_info| user_info.split(':').nth(1))
+    }
+
     pub fn host(&self) -> Option<&str> {
         self.0.host()
     }
@@ -100,8 +116,23 @@ impl Url {
         self.0.path()
     }
 
-    pub fn query(&self) -> Option<&str> {
+    pub fn query_string(&self) -> Option<&str> {
         self.0.query()
+    }
+
+    pub fn query_pairs(&self) -> Vec<(&str, &str)> {
+        self.query_string()
+            .map(|q| {
+                q.split('&')
+                    .filter_map(|pair| {
+                        let mut parts = pair.splitn(2, '=');
+                        let key = parts.next()?;
+                        let value = parts.next().unwrap_or("");
+                        Some((key, value))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -164,6 +195,14 @@ impl HeaderMap {
         self.0
             .iter()
             .map(|(key, value)| Header(key.clone(), value.clone()))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

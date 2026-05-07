@@ -1,6 +1,7 @@
 use crate::{
     app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
     theme,
+    widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
 use crossterm::event::{Event, KeyCode};
 use proxy::http::HeaderMap;
@@ -8,8 +9,8 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
     symbols,
-    text::{Line, Span},
-    widgets::{Block, Cell, Paragraph, Row, Table},
+    text::Line,
+    widgets::{Block, Cell, Paragraph, Row},
 };
 use std::fmt::Display;
 
@@ -18,6 +19,8 @@ pub enum Message {
     NextTab,
     PreviousTab,
     SelectSection(usize),
+    NextRow,
+    PreviousRow,
 }
 
 impl From<Message> for AppMessage {
@@ -105,12 +108,59 @@ impl From<usize> for ResponseSection {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+struct TableColumnWidths {
+    key: u16,
+    value: u16,
+}
+
+impl TableColumnWidths {
+    fn update(&mut self, key: &str, value: &str) {
+        self.key = self.key.max(key.chars().count() as u16);
+        self.value = self.value.max(value.chars().count() as u16);
+    }
+
+    fn to_table_widths(&self) -> [Constraint; 2] {
+        [Constraint::Length(self.key), Constraint::Min(self.value)]
+    }
+}
+
+impl From<Vec<(&str, &str)>> for TableColumnWidths {
+    fn from(pairs: Vec<(&str, &str)>) -> Self {
+        let mut widths = TableColumnWidths::default();
+        for (key, value) in pairs {
+            widths.update(key, value);
+        }
+        widths
+    }
+}
+
+impl From<HeaderMap> for TableColumnWidths {
+    fn from(headers: HeaderMap) -> Self {
+        let mut widths = TableColumnWidths::default();
+        for header in headers.iter() {
+            let key = header.key().to_string();
+            let value = header.value().unwrap_or_default().to_string();
+            widths.update(&key, &value);
+        }
+        widths
+    }
+}
+
 pub struct HttpClientScreen {
     request_entry: Option<RequestEntry>,
     tab_selected: Tab,
     section_selected: Section,
     request_section_selected: RequestSection,
     response_section_selected: ResponseSection,
+    query_params_table_state: KeyValueTableState,
+    request_query_params_column_widths: TableColumnWidths,
+    request_headers_column_widths: TableColumnWidths,
+    request_headers_table_state: KeyValueTableState,
+    request_body_state: TextAreaState,
+    response_headers_column_widths: TableColumnWidths,
+    response_headers_table_state: KeyValueTableState,
+    response_body_state: TextAreaState,
 }
 
 impl HttpClientScreen {
@@ -121,12 +171,95 @@ impl HttpClientScreen {
     const BODY_LABEL: &str = "Body";
 
     pub fn new(request_entry: Option<RequestEntry>) -> Self {
+        let request_query_params_column_widths = match &request_entry {
+            Some(entry) => {
+                let mut widths = TableColumnWidths::default();
+                let pairs = entry.request.url.query_pairs();
+                for (key, value) in pairs {
+                    widths.update(key, value);
+                }
+                widths
+            }
+            None => TableColumnWidths::default(),
+        };
+        let query_params_table_state = match &request_entry {
+            Some(entry) => {
+                let count = entry.request.url.query_pairs().len();
+                KeyValueTableState::default().content_length(count)
+            }
+            None => KeyValueTableState::default(),
+        };
+
+        let request_headers_column_widths = match &request_entry {
+            Some(entry) => entry.request.headers.clone().into(),
+            None => TableColumnWidths::default(),
+        };
+        let request_headers_table_state = match &request_entry {
+            Some(entry) => {
+                let count = entry.request.headers.len();
+                KeyValueTableState::default().content_length(count)
+            }
+            None => KeyValueTableState::default(),
+        };
+
+        let response_headers_column_widths = match &request_entry {
+            Some(entry) => {
+                if let Some(response) = &entry.response {
+                    response.headers.clone().into()
+                } else {
+                    TableColumnWidths::default()
+                }
+            }
+            None => TableColumnWidths::default(),
+        };
+
+        let response_headers_table_state = match &request_entry {
+            Some(entry) => {
+                let body_string = String::from_utf8_lossy(entry.request.body.as_bytes());
+                let lines = body_string.lines().count();
+                KeyValueTableState::default().content_length(lines)
+            }
+            None => KeyValueTableState::default(),
+        };
+
+        let request_body_state = match &request_entry {
+            Some(entry) => {
+                let body_string = String::from_utf8_lossy(entry.request.body.as_bytes());
+                let lines = body_string.lines().count();
+                TextAreaState::new(lines)
+            }
+            None => TextAreaState::default(),
+        };
+
+        let response_body_state = match &request_entry {
+            Some(entry) => {
+                let lines = entry
+                    .response
+                    .as_ref()
+                    .map(|response| {
+                        let body_string = String::from_utf8_lossy(response.body.as_bytes());
+                        body_string.lines().count()
+                    })
+                    .unwrap_or(0);
+                TextAreaState::new(lines)
+            }
+            None => TextAreaState::default(),
+        };
+
         Self {
             request_entry,
             tab_selected: Tab::Request,
             section_selected: Section::default(),
             request_section_selected: RequestSection::default(),
             response_section_selected: ResponseSection::default(),
+            request_query_params_column_widths,
+            query_params_table_state,
+            request_headers_column_widths,
+            request_headers_table_state,
+            request_body_state,
+            response_headers_column_widths,
+            response_headers_table_state,
+            response_body_state,
         }
     }
 
@@ -153,18 +286,15 @@ impl HttpClientScreen {
             None => "".to_string(),
         };
 
-        let mut block = Block::bordered().title(format!(
-            "[1]{}{}",
-            symbols::line::HORIZONTAL,
-            Self::METHOD_LABEL
-        ));
-        if self.section_selected == Section::Method {
-            block = block.style(theme::styles::highlight_fg());
-        }
+        let bordered_text = BorderedText::new(text)
+            .title(format!(
+                "[1]{}{}",
+                symbols::line::HORIZONTAL,
+                Self::METHOD_LABEL
+            ))
+            .focused(self.section_selected == Section::Method);
 
-        let paragraph = Paragraph::new(text).block(block);
-
-        frame.render_widget(paragraph, area);
+        frame.render_widget(bordered_text, area);
     }
     fn draw_url(&self, frame: &mut Frame, area: Rect) {
         let text = match &self.request_entry {
@@ -172,54 +302,47 @@ impl HttpClientScreen {
             None => "".to_string(),
         };
 
-        let mut block = Block::bordered().title(format!(
-            "[2]{}{}",
-            symbols::line::HORIZONTAL,
-            Self::URL_LABEL
-        ));
-        if self.section_selected == Section::Url {
-            block = block.style(theme::styles::highlight_fg());
-        }
+        let bordered_text = BorderedText::new(text)
+            .title(format!(
+                "[2]{}{}",
+                symbols::line::HORIZONTAL,
+                Self::URL_LABEL
+            ))
+            .focused(self.section_selected == Section::Url);
 
-        let paragraph = Paragraph::new(text).block(block);
-
-        frame.render_widget(paragraph, area);
+        frame.render_widget(bordered_text, area);
     }
 
     fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
-        let tab_titles: Vec<Span> = [Tab::Request, Tab::Response]
-            .iter()
-            .map(|tab| {
-                if self.tab_selected == *tab {
-                    Span::styled(format!(" {tab} "), theme::styles::highlight_fg())
-                } else {
-                    Span::styled(format!(" {tab} "), theme::styles::reset())
-                }
-            })
-            .collect();
-
-        let title = Line::from(tab_titles);
-        let tabs = Block::bordered().title(title);
-        frame.render_widget(tabs, area);
+        let tab_line = Tabs::default()
+            .titles(vec![
+                format!(" {} ", Tab::Request),
+                format!(" {} ", Tab::Response),
+            ])
+            .with_spacer(symbols::line::HORIZONTAL)
+            .select(match self.tab_selected {
+                Tab::Request => 0,
+                Tab::Response => 1,
+            });
+        frame.render_widget(tab_line, area);
     }
 
-    fn draw_query_params(&self, frame: &mut Frame, area: Rect, select_index: usize) {
+    fn draw_query_params(&mut self, frame: &mut Frame, area: Rect, select_index: usize) {
         let request_entry = match &self.request_entry {
             Some(entry) => entry,
             None => return,
         };
 
-        let mut width = [0, 0];
-        let query_string = request_entry.request.url.query().unwrap_or_default();
-        let params: Vec<Row> = query_string
-            .split('&')
-            .filter_map(|param| {
-                let mut parts = param.splitn(2, '=');
-                let key = parts.next()?;
-                let value = parts.next().unwrap_or_default();
-                width[0] = width[0].max(key.chars().count() as u16);
-                width[1] = width[1].max(value.chars().count() as u16);
-                Some(Row::new(vec![Cell::from(key), Cell::from(value)]))
+        let params: Vec<Row> = request_entry
+            .request
+            .url
+            .query_pairs()
+            .iter()
+            .map(|(key, value)| {
+                Row::new(vec![
+                    Cell::from(key.to_string()),
+                    Cell::from(value.to_string()),
+                ])
             })
             .collect();
         let title = Line::from(format!(
@@ -232,26 +355,31 @@ impl HttpClientScreen {
         if self.section_selected == Section::QueryParams {
             block = block.style(theme::styles::highlight_fg());
         }
-        let params_table = Table::default()
+
+        let kvtable = KeyValueTable::default()
             .rows(params)
             .block(block)
-            .widths(vec![
-                Constraint::Length(width[0]),
-                Constraint::Min(width[1]),
-            ])
-            .column_spacing(3);
-        frame.render_widget(params_table, area);
+            .widths(self.request_query_params_column_widths.to_table_widths());
+        frame.render_stateful_widget(kvtable, area, &mut self.query_params_table_state);
     }
 
-    fn draw_headers(&self, frame: &mut Frame, area: Rect, headers: HeaderMap, select_index: usize) {
-        let mut widths = [0, 0];
+    fn draw_headers(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        headers: HeaderMap,
+        select_index: usize,
+    ) {
+        let table_column_widths = match self.tab_selected {
+            Tab::Request => self.request_headers_column_widths.to_table_widths(),
+            Tab::Response => self.response_headers_column_widths.to_table_widths(),
+        };
+
         let headers: Vec<Row> = headers
             .iter()
             .map(|header| {
                 let key = header.key().to_string();
                 let value = header.value().unwrap_or_default().to_string();
-                widths[0] = widths[0].max(key.chars().count() as u16);
-                widths[1] = widths[1].max(value.chars().count() as u16);
                 Row::new(vec![Cell::from(key), Cell::from(value)])
             })
             .collect();
@@ -265,18 +393,19 @@ impl HttpClientScreen {
         if self.section_selected == Section::Headers {
             block = block.style(theme::styles::highlight_fg());
         }
-        let header_table = Table::default()
+
+        let state = match self.tab_selected {
+            Tab::Request => &mut self.request_headers_table_state,
+            Tab::Response => &mut self.response_headers_table_state,
+        };
+        let kvtable = KeyValueTable::default()
             .rows(headers)
             .block(block)
-            .widths(vec![
-                Constraint::Length(widths[0]),
-                Constraint::Min(widths[1]),
-            ])
-            .column_spacing(3);
-        frame.render_widget(header_table, area);
+            .widths(table_column_widths);
+        frame.render_stateful_widget(kvtable, area, state);
     }
 
-    fn draw_body(&self, frame: &mut Frame, area: Rect, body: &[u8], select_index: usize) {
+    fn draw_body(&mut self, frame: &mut Frame, area: Rect, body: &[u8], select_index: usize) {
         let title = Line::from(format!(
             "[{}]{}{}",
             select_index,
@@ -288,8 +417,14 @@ impl HttpClientScreen {
         if self.section_selected == Section::Body {
             block = block.style(theme::styles::highlight_fg());
         }
-        let paragraph = Paragraph::new(body_string).block(block);
-        frame.render_widget(paragraph, area);
+
+        let state = match self.tab_selected {
+            Tab::Request => &mut self.request_body_state,
+            Tab::Response => &mut self.response_body_state,
+        };
+
+        let text_area = TextArea::new(body_string.to_string()).block(block);
+        frame.render_stateful_widget(text_area, area, state);
     }
 
     fn select_next_tab(&mut self) -> Option<AppMessage> {
@@ -342,12 +477,68 @@ impl HttpClientScreen {
 
         None
     }
+
+    fn next_row(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_next();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_next();
+                }
+                Section::Body => {
+                    self.request_body_state.next();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_next();
+                }
+                Section::Body => {
+                    self.response_body_state.next();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn previous_row(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_previous();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_previous();
+                }
+                Section::Body => {
+                    self.request_body_state.prev();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_previous();
+                }
+                Section::Body => {
+                    self.response_body_state.prev();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
 }
 
 impl Screen for HttpClientScreen {
     fn draw(&mut self, frame: &mut Frame) {
         let request_entry = match &self.request_entry {
-            Some(entry) => entry,
+            Some(entry) => entry.clone(),
             None => {
                 self.draw_empty(frame);
                 return;
@@ -430,6 +621,12 @@ impl Screen for HttpClientScreen {
                 KeyCode::Right | KeyCode::Char('l') => {
                     return Some(Message::NextTab.into());
                 }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    return Some(Message::PreviousRow.into());
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    return Some(Message::NextRow.into());
+                }
                 KeyCode::Char(c) => {
                     if let Some(d @ 1..=5) = c.to_digit(10) {
                         return Some(Message::SelectSection(d as usize).into());
@@ -452,6 +649,8 @@ impl Screen for HttpClientScreen {
             Message::PreviousTab => self.select_previous_tab(),
             Message::NextTab => self.select_next_tab(),
             Message::SelectSection(section) => self.select_section(section),
+            Message::NextRow => self.next_row(),
+            Message::PreviousRow => self.previous_row(),
         }
     }
 }
