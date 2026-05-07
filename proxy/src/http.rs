@@ -1,6 +1,6 @@
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
-use hyper::{HeaderMap as HyperHeaderMap, Uri, body::Bytes};
+use hyper::{HeaderMap as HyperHeaderMap, StatusCode as HyperStatusCode, Uri, body::Bytes};
 use std::fmt::Display;
 
 pub(crate) trait BytesExt {
@@ -21,6 +21,8 @@ pub enum Error {
     RequestBodyRead(Box<RequestContextError>),
     #[error("Failed to read response body: {0:?}")]
     ResponseBodyRead(Box<ResponseContextError>),
+    #[error("Invalid status code: {0}")]
+    StatusCodeParse(#[source] hyper::http::status::InvalidStatusCode),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -225,6 +227,15 @@ impl Body {
     }
 }
 
+impl Display for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match std::str::from_utf8(&self.0) {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => write!(f, "{:?}", self.0),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Request {
     pub method: Method,
@@ -294,8 +305,63 @@ impl Request {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct StatusCode(HyperStatusCode);
+
+impl StatusCode {
+    pub fn as_u16(&self) -> u16 {
+        self.0.as_u16()
+    }
+
+    pub fn canonical_reason(&self) -> &str {
+        self.0.canonical_reason().unwrap_or("Unknown Status")
+    }
+
+    pub fn is_informational(&self) -> bool {
+        self.0.is_informational()
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.0.is_success()
+    }
+
+    pub fn is_redirection(&self) -> bool {
+        self.0.is_redirection()
+    }
+
+    pub fn is_client_error(&self) -> bool {
+        self.0.is_client_error()
+    }
+
+    pub fn is_server_error(&self) -> bool {
+        self.0.is_server_error()
+    }
+}
+
+impl TryFrom<u16> for StatusCode {
+    type Error = Error;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        HyperStatusCode::try_from(value)
+            .map(Self)
+            .map_err(Error::StatusCodeParse)
+    }
+}
+
+impl From<HyperStatusCode> for StatusCode {
+    fn from(status: HyperStatusCode) -> Self {
+        Self(status)
+    }
+}
+
+impl Display for StatusCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Response {
-    pub status: u16,
+    pub status: StatusCode,
     pub headers: HeaderMap,
     pub body: Body,
 }
@@ -320,7 +386,7 @@ impl Response {
     ) -> Result<Self, Error> {
         let body = Self::read_body(parts, body).await?;
         Ok(Self {
-            status: parts.status.as_u16(),
+            status: parts.status.into(),
             headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })

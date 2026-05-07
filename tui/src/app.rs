@@ -1,4 +1,5 @@
 use crate::{
+    clipboard::Clipboard,
     config::Config,
     http_client_screen::{HttpClientScreen, Message as HttpClientScreenMessage},
     requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
@@ -25,7 +26,7 @@ use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
-    ShowHttpClientScreen(Box<Option<RequestEntry>>),
+    ShowHttpClientScreen(Box<RequestEntry>),
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
     Quit,
@@ -57,6 +58,7 @@ pub struct RequestEntry {
 }
 
 pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
+pub type ClipboardStore = Arc<Mutex<Clipboard>>;
 
 pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), ServerError>>>,
@@ -68,17 +70,22 @@ pub struct App {
     exit_error: Option<anyhow::Error>,
     waiting_messages: bool,
     request_store: RequestStore,
+    clipboard_store: ClipboardStore,
 }
 
 impl App {
     const MESSAGE_CHANNEL_BUFFER_SIZE: usize = 128;
 
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config) -> anyhow::Result<Self> {
         let screen = Box::new(WaitingScreen::new(
             config.server_host.clone(),
             config.server_port,
         ));
-        Self {
+        let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
+        let system_clipboard = Clipboard::new()?;
+        let clipboard_store = ClipboardStore::new(Mutex::new(system_clipboard));
+
+        Ok(Self {
             abort_app_rx: None,
             abort_server_tx: None,
             message_rx: None,
@@ -87,8 +94,9 @@ impl App {
             running: true,
             exit_error: None,
             waiting_messages: true,
-            request_store: RequestStore::new(Mutex::new(BTreeMap::new())),
-        }
+            request_store,
+            clipboard_store,
+        })
     }
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
@@ -165,11 +173,11 @@ impl App {
     }
 
     async fn handle_event(&mut self, event_stream: &mut EventStream) -> Option<Message> {
-        let message_rx = match &mut self.message_rx {
+        let message_rx = match self.message_rx.as_mut() {
             Some(rx) => rx,
             None => return Some(Message::Quit),
         };
-        let mut abort_app_rx = match &mut self.abort_app_rx {
+        let mut abort_app_rx = match self.abort_app_rx.as_mut() {
             Some(rx) => rx,
             None => return Some(Message::Quit),
         };
@@ -249,8 +257,11 @@ impl App {
         }
     }
 
-    fn show_http_client_screen(&mut self, request_entry: Option<RequestEntry>) -> Option<Message> {
-        self.screen = Box::new(HttpClientScreen::new(request_entry));
+    fn show_http_client_screen(&mut self, request_entry: RequestEntry) -> Option<Message> {
+        self.screen = Box::new(HttpClientScreen::new(
+            self.clipboard_store.clone(),
+            request_entry,
+        ));
         None
     }
 
@@ -334,7 +345,7 @@ mod tests {
 
     #[fixture]
     fn app(config: Config) -> App {
-        App::new(config)
+        App::new(config).unwrap()
     }
 
     #[rstest]
@@ -380,7 +391,7 @@ mod tests {
         };
         app.store_request(request_id, request.clone());
         let response = Response {
-            status: 200,
+            status: 200.try_into().unwrap(),
             headers: HeaderMap::new(vec![]),
             body: Body::new(vec![]),
         };

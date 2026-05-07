@@ -5,6 +5,7 @@ use clap::Parser;
 
 mod app;
 mod cli;
+mod clipboard;
 mod config;
 mod http_client_screen;
 mod requests_screen;
@@ -19,7 +20,10 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::new(server_host, server_port)?;
 
     let mut terminal = ratatui::init();
-    let app_result = App::new(config).run(&mut terminal).await;
+    let app_result = match App::new(config).as_mut() {
+        Ok(app) => app.run(&mut terminal).await,
+        Err(err) => Err(anyhow::anyhow!("Failed to initialize app: {err}")),
+    };
     ratatui::restore();
     app_result
 }

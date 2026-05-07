@@ -1,5 +1,5 @@
 use crate::{
-    app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
+    app::{ClipboardStore, Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
     theme,
     widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
@@ -10,12 +10,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Margin, Rect},
     symbols,
     text::Line,
-    widgets::{Block, Cell, Paragraph, Row},
+    widgets::{Block, Cell, Row},
 };
 use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
+    SetInputBuffer(Option<String>),
+    CopySelectedToClipboard,
     NextTab,
     PreviousTab,
     SelectSection(usize),
@@ -148,7 +150,9 @@ impl From<HeaderMap> for TableColumnWidths {
 }
 
 pub struct HttpClientScreen {
-    request_entry: Option<RequestEntry>,
+    clipboard_store: ClipboardStore,
+    request_entry: RequestEntry,
+    input_buffer: Option<String>,
     tab_selected: Tab,
     section_selected: Section,
     request_section_selected: RequestSection,
@@ -170,84 +174,46 @@ impl HttpClientScreen {
     const HEADERS_LABEL: &str = "Headers";
     const BODY_LABEL: &str = "Body";
 
-    pub fn new(request_entry: Option<RequestEntry>) -> Self {
-        let request_query_params_column_widths = match &request_entry {
-            Some(entry) => {
-                let mut widths = TableColumnWidths::default();
-                let pairs = entry.request.url.query_pairs();
-                for (key, value) in pairs {
-                    widths.update(key, value);
-                }
-                widths
-            }
+    pub fn new(clipboard_store: ClipboardStore, request_entry: RequestEntry) -> Self {
+        let request_query_params_column_widths = request_entry.request.url.query_pairs().into();
+        let query_params_table_state = {
+            let count = request_entry.request.url.query_pairs().len();
+            KeyValueTableState::default().content_length(count)
+        };
+        let request_headers_column_widths = request_entry.request.headers.clone().into();
+        let request_headers_table_state = {
+            let count = request_entry.request.headers.len();
+            KeyValueTableState::default().content_length(count)
+        };
+        let response_headers_column_widths = match &request_entry.response {
+            Some(response) => response.headers.clone().into(),
             None => TableColumnWidths::default(),
         };
-        let query_params_table_state = match &request_entry {
-            Some(entry) => {
-                let count = entry.request.url.query_pairs().len();
+        let response_headers_table_state = match &request_entry.response {
+            Some(response) => {
+                let count = response.headers.len();
                 KeyValueTableState::default().content_length(count)
             }
             None => KeyValueTableState::default(),
         };
-
-        let request_headers_column_widths = match &request_entry {
-            Some(entry) => entry.request.headers.clone().into(),
-            None => TableColumnWidths::default(),
+        let request_body_state = {
+            let body_string = String::from_utf8_lossy(request_entry.request.body.as_bytes());
+            let lines = body_string.lines().count();
+            TextAreaState::new(lines)
         };
-        let request_headers_table_state = match &request_entry {
-            Some(entry) => {
-                let count = entry.request.headers.len();
-                KeyValueTableState::default().content_length(count)
-            }
-            None => KeyValueTableState::default(),
-        };
-
-        let response_headers_column_widths = match &request_entry {
-            Some(entry) => {
-                if let Some(response) = &entry.response {
-                    response.headers.clone().into()
-                } else {
-                    TableColumnWidths::default()
-                }
-            }
-            None => TableColumnWidths::default(),
-        };
-
-        let response_headers_table_state = match &request_entry {
-            Some(entry) => {
-                let body_string = String::from_utf8_lossy(entry.request.body.as_bytes());
+        let response_body_state = match &request_entry.response {
+            Some(response) => {
+                let body_string = String::from_utf8_lossy(response.body.as_bytes());
                 let lines = body_string.lines().count();
-                KeyValueTableState::default().content_length(lines)
-            }
-            None => KeyValueTableState::default(),
-        };
-
-        let request_body_state = match &request_entry {
-            Some(entry) => {
-                let body_string = String::from_utf8_lossy(entry.request.body.as_bytes());
-                let lines = body_string.lines().count();
-                TextAreaState::new(lines)
-            }
-            None => TextAreaState::default(),
-        };
-
-        let response_body_state = match &request_entry {
-            Some(entry) => {
-                let lines = entry
-                    .response
-                    .as_ref()
-                    .map(|response| {
-                        let body_string = String::from_utf8_lossy(response.body.as_bytes());
-                        body_string.lines().count()
-                    })
-                    .unwrap_or(0);
                 TextAreaState::new(lines)
             }
             None => TextAreaState::default(),
         };
 
         Self {
+            clipboard_store,
             request_entry,
+            input_buffer: None,
             tab_selected: Tab::Request,
             section_selected: Section::default(),
             request_section_selected: RequestSection::default(),
@@ -263,13 +229,6 @@ impl HttpClientScreen {
         }
     }
 
-    fn draw_empty(&mut self, frame: &mut Frame) {
-        let message = "No request selected. Please select a request from the Requests Screen.";
-        let block = Block::bordered();
-        let paragraph = Paragraph::new(message).centered().block(block);
-        frame.render_widget(paragraph, frame.area());
-    }
-
     fn draw_method_url(&self, frame: &mut Frame, area: Rect) {
         let layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -281,11 +240,7 @@ impl HttpClientScreen {
     }
 
     fn draw_method(&self, frame: &mut Frame, area: Rect) {
-        let text = match &self.request_entry {
-            Some(entry) => entry.request.method.to_string(),
-            None => "".to_string(),
-        };
-
+        let text = self.request_entry.request.method.to_string();
         let bordered_text = BorderedText::new(text)
             .title(format!(
                 "[1]{}{}",
@@ -296,12 +251,9 @@ impl HttpClientScreen {
 
         frame.render_widget(bordered_text, area);
     }
-    fn draw_url(&self, frame: &mut Frame, area: Rect) {
-        let text = match &self.request_entry {
-            Some(entry) => entry.request.url.to_string(),
-            None => "".to_string(),
-        };
 
+    fn draw_url(&self, frame: &mut Frame, area: Rect) {
+        let text = self.request_entry.request.url.to_string();
         let bordered_text = BorderedText::new(text)
             .title(format!(
                 "[2]{}{}",
@@ -314,10 +266,15 @@ impl HttpClientScreen {
     }
 
     fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
+        let status = match &self.request_entry.response {
+            Some(response) => response.status.to_string(),
+            None => String::default(),
+        };
+
         let tab_line = Tabs::default()
             .titles(vec![
                 format!(" {} ", Tab::Request),
-                format!(" {} ", Tab::Response),
+                format!(" {} ({})", Tab::Response, status),
             ])
             .with_spacer(symbols::line::HORIZONTAL)
             .select(match self.tab_selected {
@@ -328,10 +285,7 @@ impl HttpClientScreen {
     }
 
     fn draw_query_params(&mut self, frame: &mut Frame, area: Rect, select_index: usize) {
-        let request_entry = match &self.request_entry {
-            Some(entry) => entry,
-            None => return,
-        };
+        let request_entry = &self.request_entry;
 
         let params: Vec<Row> = request_entry
             .request
@@ -427,6 +381,12 @@ impl HttpClientScreen {
         frame.render_stateful_widget(text_area, area, state);
     }
 
+    fn draw_status_bar(&self, frame: &mut Frame, area: Rect) {
+        let text = "Press 'yy' to copy selected value to clipboard. Use arrow keys or 'h', 'j', 'k', 'l' to navigate.";
+        let bordered_text = BorderedText::new(text);
+        frame.render_widget(bordered_text, area);
+    }
+
     fn select_next_tab(&mut self) -> Option<AppMessage> {
         self.tab_selected = match self.tab_selected {
             Tab::Request => Tab::Response,
@@ -440,6 +400,89 @@ impl HttpClientScreen {
             },
         };
         None
+    }
+
+    fn set_input_buffer(&mut self, value: Option<String>) -> Option<AppMessage> {
+        self.input_buffer = value;
+        None
+    }
+
+    fn copy_selected_to_clipboard(&mut self) -> Option<AppMessage> {
+        let request_entry = &self.request_entry;
+
+        let text = match (&self.tab_selected, &self.section_selected) {
+            (_, Section::Method) => request_entry.request.method.to_string(),
+            (_, Section::Url) => request_entry.request.url.to_string(),
+            (Tab::Request, Section::QueryParams) => self.get_query_param_selected(),
+            (Tab::Request, Section::Headers) => self.get_request_header_selected(),
+            (Tab::Request, Section::Body) => self.get_request_body(),
+            (Tab::Response, Section::Headers) => self.get_response_header_selected(),
+            (Tab::Response, Section::Body) => self.get_response_body(),
+            _ => String::default(),
+        };
+
+        if let Ok(mut store) = self.clipboard_store.lock() {
+            // TODO: Show error message if copy fails
+            let _ = store.set_text(text);
+        }
+
+        Some(Message::SetInputBuffer(None).into())
+    }
+
+    fn get_query_param_selected(&self) -> String {
+        if self.section_selected != Section::QueryParams {
+            return String::default();
+        }
+
+        let selected = self.query_params_table_state.selected().unwrap_or(0);
+        self.request_entry
+            .request
+            .url
+            .query_pairs()
+            .get(selected)
+            .map(|(key, value)| format!("{}={}", key, value))
+            .unwrap_or_default()
+    }
+
+    fn get_request_header_selected(&self) -> String {
+        let selected = self.request_headers_table_state.selected().unwrap_or(0);
+        self.request_entry
+            .request
+            .headers
+            .iter()
+            .nth(selected)
+            .map(|header| {
+                let key = header.key().to_string();
+                let value = header.value().unwrap_or_default().to_string();
+                format!("{}: {}", key, value)
+            })
+            .unwrap_or_default()
+    }
+
+    fn get_request_body(&self) -> String {
+        String::from_utf8_lossy(self.request_entry.request.body.as_bytes()).to_string()
+    }
+
+    fn get_response_header_selected(&self) -> String {
+        let selected = self.response_headers_table_state.selected().unwrap_or(0);
+        self.request_entry
+            .response
+            .as_ref()
+            .and_then(|response| response.headers.iter().nth(selected))
+            .map(|header| {
+                let key = header.key().to_string();
+                let value = header.value().unwrap_or_default().to_string();
+                format!("{}: {}", key, value)
+            })
+            .unwrap_or_default()
+    }
+
+    fn get_response_body(&self) -> String {
+        self.request_entry
+            .response
+            .as_ref()
+            .map(|response| String::from_utf8_lossy(response.body.as_bytes()).to_string())
+            .unwrap_or_default()
     }
 
     fn select_previous_tab(&mut self) -> Option<AppMessage> {
@@ -537,18 +580,16 @@ impl HttpClientScreen {
 
 impl Screen for HttpClientScreen {
     fn draw(&mut self, frame: &mut Frame) {
-        let request_entry = match &self.request_entry {
-            Some(entry) => entry.clone(),
-            None => {
-                self.draw_empty(frame);
-                return;
-            }
-        };
+        let request_entry = &self.request_entry.clone();
 
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(3)]);
-        let [method_url_area, tabbed_pane_area] = frame.area().layout(&layout);
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(3),
+                Constraint::Length(3),
+            ]);
+        let [method_url_area, tabbed_pane_area, status_area] = frame.area().layout(&layout);
 
         self.draw_method_url(frame, method_url_area);
 
@@ -606,6 +647,8 @@ impl Screen for HttpClientScreen {
                 );
             }
         }
+
+        self.draw_status_bar(frame, status_area);
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
@@ -614,25 +657,37 @@ impl Screen for HttpClientScreen {
         }
 
         if let Event::Key(key_event) = event {
-            match key_event.code {
-                KeyCode::Left | KeyCode::Char('h') => {
-                    return Some(Message::PreviousTab.into());
+            let input_buffer = self.input_buffer.as_deref();
+            match input_buffer {
+                Some("y") => {
+                    return Some(Message::CopySelectedToClipboard.into());
                 }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    return Some(Message::NextTab.into());
+                Some(_) => {
+                    return Some(Message::SetInputBuffer(None).into());
                 }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    return Some(Message::PreviousRow.into());
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    return Some(Message::NextRow.into());
-                }
-                KeyCode::Char(c) => {
-                    if let Some(d @ 1..=5) = c.to_digit(10) {
-                        return Some(Message::SelectSection(d as usize).into());
+                _ => match key_event.code {
+                    KeyCode::Left | KeyCode::Char('h') => {
+                        return Some(Message::PreviousTab.into());
                     }
-                }
-                _ => {}
+                    KeyCode::Right | KeyCode::Char('l') => {
+                        return Some(Message::NextTab.into());
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        return Some(Message::PreviousRow.into());
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        return Some(Message::NextRow.into());
+                    }
+                    KeyCode::Char('y') => {
+                        return Some(Message::SetInputBuffer(Some('y'.to_string())).into());
+                    }
+                    KeyCode::Char(c @ '1'..='5') => {
+                        if let Some(d @ 1..=5) = c.to_digit(10) {
+                            return Some(Message::SelectSection(d as usize).into());
+                        }
+                    }
+                    _ => {}
+                },
             }
         }
 
@@ -646,6 +701,8 @@ impl Screen for HttpClientScreen {
         };
 
         match message {
+            Message::SetInputBuffer(value) => self.set_input_buffer(value),
+            Message::CopySelectedToClipboard => self.copy_selected_to_clipboard(),
             Message::PreviousTab => self.select_previous_tab(),
             Message::NextTab => self.select_next_tab(),
             Message::SelectSection(section) => self.select_section(section),

@@ -115,6 +115,10 @@ impl KeyValueTableState {
         self
     }
 
+    pub fn selected(&self) -> Option<usize> {
+        self.table_state.selected()
+    }
+
     pub fn select_next(&mut self) {
         self.table_state.select_next();
         self.scrollbar_state.next();

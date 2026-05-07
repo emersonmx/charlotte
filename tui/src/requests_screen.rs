@@ -226,11 +226,8 @@ impl Screen for RequestsScreen {
                 KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
                 KeyCode::Enter | KeyCode::Char('l') => {
                     let selected = self.table_state.selected()?;
-                    let request_entry = match self.request_store.lock() {
-                        Ok(store) => store.values().nth(selected).cloned(),
-                        Err(_) => return None,
-                    };
-
+                    let store = self.request_store.lock().ok()?;
+                    let request_entry = store.values().nth(selected).cloned()?;
                     return Some(AppMessage::ShowHttpClientScreen(Box::new(request_entry)));
                 }
                 _ => {}
