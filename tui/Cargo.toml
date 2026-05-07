@@ -13,6 +13,9 @@ ratatui-textarea = "0.9"
 thiserror.workspace = true
 tokio-stream.workspace = true
 tokio.workspace = true
+arboard = { version = "3.6", features = [
+    "wayland-data-control",
+], default-features = false }
 
 [dev-dependencies]
 insta.workspace = true
