@@ -1,5 +1,5 @@
 use crate::{
-    app::{ClipboardStore, Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
+    app::{Clipboard, Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
     theme,
     widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
@@ -150,7 +150,7 @@ impl From<HeaderMap> for TableColumnWidths {
 }
 
 pub struct HttpClientScreen {
-    clipboard_store: ClipboardStore,
+    clipboard: Clipboard,
     request_entry: RequestEntry,
     input_buffer: Option<String>,
     tab_selected: Tab,
@@ -174,7 +174,7 @@ impl HttpClientScreen {
     const HEADERS_LABEL: &str = "Headers";
     const BODY_LABEL: &str = "Body";
 
-    pub fn new(clipboard_store: ClipboardStore, request_entry: RequestEntry) -> Self {
+    pub fn new(clipboard: Clipboard, request_entry: RequestEntry) -> Self {
         let request_query_params_column_widths = request_entry.request.url.query_pairs().into();
         let query_params_table_state = {
             let count = request_entry.request.url.query_pairs().len();
@@ -211,7 +211,7 @@ impl HttpClientScreen {
         };
 
         Self {
-            clipboard_store,
+            clipboard,
             request_entry,
             input_buffer: None,
             tab_selected: Tab::Request,
@@ -382,7 +382,7 @@ impl HttpClientScreen {
     }
 
     fn draw_status_bar(&self, frame: &mut Frame, area: Rect) {
-        let text = "Press 'yy' to copy selected value to clipboard. Use arrow keys or 'h', 'j', 'k', 'l' to navigate.";
+        let text = "Press 'backspace' to go back, 'yy' to copy selected value to clipboard. Use arrow keys or 'h', 'j', 'k', 'l' to navigate.";
         let bordered_text = BorderedText::new(text);
         frame.render_widget(bordered_text, area);
     }
@@ -421,7 +421,7 @@ impl HttpClientScreen {
             _ => String::default(),
         };
 
-        if let Ok(mut store) = self.clipboard_store.lock() {
+        if let Ok(mut store) = self.clipboard.lock() {
             // TODO: Show error message if copy fails
             let _ = store.set_text(text);
         }
@@ -685,6 +685,9 @@ impl Screen for HttpClientScreen {
                         if let Some(d @ 1..=5) = c.to_digit(10) {
                             return Some(Message::SelectSection(d as usize).into());
                         }
+                    }
+                    KeyCode::Backspace => {
+                        return Some(AppMessage::ShowRequestsScreen);
                     }
                     _ => {}
                 },

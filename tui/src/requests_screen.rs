@@ -1,23 +1,24 @@
 use crate::{
-    app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event},
+    app::{
+        Message as AppMessage, RequestEntryRow, RequestStore, RequestsTableColumnWidths, Screen,
+        SharedRequestsTableColumnWidths, is_quit_key_event,
+    },
     theme,
     widgets::BorderedText,
 };
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction::Vertical, Layout, Rect},
+    layout::{Constraint, Direction::Vertical, Layout, Rect},
     symbols::{self},
-    text::Text,
     widgets::{
-        Block, Borders, Cell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
-        TableState,
+        Block, Borders, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState,
     },
 };
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
-    UpdateTableState(Box<RequestEntryRow>),
+    UpdateTableState,
     SelectPreviousRow,
     SelectNextRow,
 }
@@ -28,97 +29,18 @@ impl From<Message> for AppMessage {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct RequestEntryRow {
-    request_id: String,
-    method: String,
-    url: String,
-    body: String,
-    status: String,
-}
-
-impl From<&RequestEntry> for RequestEntryRow {
-    fn from(entry: &RequestEntry) -> Self {
-        let status = if let Some(response) = &entry.response {
-            response.status.to_string()
-        } else {
-            "Pending".to_string()
-        };
-
-        RequestEntryRow {
-            request_id: entry.request_id.to_string(),
-            method: entry.request.method.to_string(),
-            url: entry.request.url.to_string(),
-            body: String::from_utf8_lossy(entry.request.body.as_bytes()).to_string(),
-            status,
-        }
-    }
-}
-
-impl From<RequestEntryRow> for Row<'_> {
-    fn from(row: RequestEntryRow) -> Self {
-        Row::new(vec![
-            Cell::from(Text::from(row.request_id).alignment(Alignment::Right)),
-            Cell::from(row.method),
-            Cell::from(row.url),
-            Cell::from(row.body),
-            Cell::from(row.status),
-        ])
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-struct RequestTableColumnWidths {
-    request_id: u16,
-    method: u16,
-    url: u16,
-    body: u16,
-    status: u16,
-}
-
-impl RequestTableColumnWidths {
-    fn update(&mut self, row: RequestEntryRow) {
-        self.request_id = self.request_id.max(row.request_id.len() as u16);
-        self.method = self.method.max(row.method.len() as u16);
-        self.url = self.url.max(row.url.len() as u16);
-        self.body = self.body.max(row.body.len() as u16);
-        self.status = self.status.max(row.status.len() as u16);
-    }
-
-    fn to_table_widths(&self) -> [Constraint; 5] {
-        [
-            Constraint::Length(self.request_id),
-            Constraint::Length(self.method),
-            Constraint::Length(self.url),
-            Constraint::Min(self.body),
-            Constraint::Length(self.status),
-        ]
-    }
-}
-
 pub struct RequestsScreen {
     request_store: RequestStore,
-    column_widths: RequestTableColumnWidths,
+    column_widths: SharedRequestsTableColumnWidths,
     table_state: TableState,
     table_scroll_state: ScrollbarState,
 }
 
 impl RequestsScreen {
-    const TABLE_COLUMN_REQ_ID: &str = "ReqId";
-    const TABLE_COLUMN_METHOD: &str = "Method";
-    const TABLE_COLUMN_URL: &str = "URL";
-    const TABLE_COLUMN_BODY: &str = "Body";
-    const TABLE_COLUMN_STATUS: &str = "Status";
-
-    pub fn new(request_store: RequestStore) -> Self {
-        let mut column_widths = RequestTableColumnWidths::default();
-        column_widths.update(RequestEntryRow {
-            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
-            method: Self::TABLE_COLUMN_METHOD.to_string(),
-            url: Self::TABLE_COLUMN_URL.to_string(),
-            body: Self::TABLE_COLUMN_BODY.to_string(),
-            status: Self::TABLE_COLUMN_STATUS.to_string(),
-        });
+    pub fn new(
+        request_store: RequestStore,
+        column_widths: SharedRequestsTableColumnWidths,
+    ) -> Self {
         Self {
             request_store,
             column_widths,
@@ -129,9 +51,7 @@ impl RequestsScreen {
 }
 
 impl RequestsScreen {
-    fn update_table_state(&mut self, row: RequestEntryRow) -> Option<AppMessage> {
-        self.column_widths.update(row);
-
+    fn update_table_state(&mut self) -> Option<AppMessage> {
         if self.table_state.selected().is_none() {
             self.table_state.select_first();
         }
@@ -170,14 +90,18 @@ impl Screen for RequestsScreen {
             Constraint::Length(3),
         ]);
         let [header_layout, rows_layout, status_area] = frame.area().layout(&layout);
-        let table_widths = self.column_widths.to_table_widths();
+        let table_widths = if let Ok(widths) = self.column_widths.lock() {
+            widths.clone()
+        } else {
+            RequestsTableColumnWidths::default()
+        };
 
         let header = RequestEntryRow {
-            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
-            method: Self::TABLE_COLUMN_METHOD.to_string(),
-            url: Self::TABLE_COLUMN_URL.to_string(),
-            body: Self::TABLE_COLUMN_BODY.to_string(),
-            status: Self::TABLE_COLUMN_STATUS.to_string(),
+            request_id: RequestsTableColumnWidths::TABLE_COLUMN_REQ_ID.to_string(),
+            method: RequestsTableColumnWidths::TABLE_COLUMN_METHOD.to_string(),
+            url: RequestsTableColumnWidths::TABLE_COLUMN_URL.to_string(),
+            body: RequestsTableColumnWidths::TABLE_COLUMN_BODY.to_string(),
+            status: RequestsTableColumnWidths::TABLE_COLUMN_STATUS.to_string(),
         };
         let border_set = symbols::border::Set {
             bottom_left: symbols::line::VERTICAL_RIGHT,
@@ -187,7 +111,7 @@ impl Screen for RequestsScreen {
         let table = Table::default()
             .header(header.into())
             .block(Block::bordered().border_set(border_set))
-            .widths(table_widths);
+            .widths(table_widths.to_table_widths());
         frame.render_widget(table, header_layout);
 
         let rows = match self.request_store.lock() {
@@ -201,7 +125,7 @@ impl Screen for RequestsScreen {
         let table = Table::default()
             .rows(rows)
             .block(Block::bordered().borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT))
-            .widths(table_widths)
+            .widths(table_widths.to_table_widths())
             .row_highlight_style(theme::styles::highlight());
         frame.render_stateful_widget(table, rows_layout, &mut self.table_state);
 
@@ -252,7 +176,7 @@ impl Screen for RequestsScreen {
         };
 
         match message {
-            Message::UpdateTableState(row) => self.update_table_state(*row),
+            Message::UpdateTableState => self.update_table_state(),
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
         }

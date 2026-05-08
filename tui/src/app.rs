@@ -1,5 +1,4 @@
 use crate::{
-    clipboard::Clipboard,
     config::Config,
     http_client_screen::{HttpClientScreen, Message as HttpClientScreenMessage},
     requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
@@ -11,7 +10,12 @@ use proxy::{
     http::{Request, Response},
     server::{Error as ServerError, Message as ProxyMessage, RequestId, Server as ProxyServer},
 };
-use ratatui::{DefaultTerminal, Frame};
+use ratatui::{
+    DefaultTerminal, Frame,
+    layout::{Alignment, Constraint},
+    text::Text,
+    widgets::{Cell, Row},
+};
 use std::{
     collections::BTreeMap,
     net::SocketAddr,
@@ -26,6 +30,7 @@ use tokio_stream::StreamExt;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
+    ShowRequestsScreen,
     ShowHttpClientScreen(Box<RequestEntry>),
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
@@ -58,7 +63,102 @@ pub struct RequestEntry {
 }
 
 pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
-pub type ClipboardStore = Arc<Mutex<Clipboard>>;
+pub type Clipboard = Arc<Mutex<crate::clipboard::Clipboard>>;
+pub type SharedRequestsTableColumnWidths = Arc<Mutex<RequestsTableColumnWidths>>;
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RequestEntryRow {
+    pub request_id: String,
+    pub method: String,
+    pub url: String,
+    pub body: String,
+    pub status: String,
+}
+
+impl From<&RequestEntry> for RequestEntryRow {
+    fn from(entry: &RequestEntry) -> Self {
+        let status = if let Some(response) = &entry.response {
+            response.status.as_u16().to_string()
+        } else {
+            "Pending".to_string()
+        };
+
+        RequestEntryRow {
+            request_id: entry.request_id.to_string(),
+            method: entry.request.method.to_string(),
+            url: entry.request.url.to_string(),
+            body: String::from_utf8_lossy(entry.request.body.as_bytes()).to_string(),
+            status,
+        }
+    }
+}
+
+impl From<RequestEntryRow> for Row<'_> {
+    fn from(row: RequestEntryRow) -> Self {
+        Row::new(vec![
+            Cell::from(Text::from(row.request_id).alignment(Alignment::Right)),
+            Cell::from(row.method),
+            Cell::from(row.url),
+            Cell::from(row.body),
+            Cell::from(row.status),
+        ])
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RequestsTableColumnWidths {
+    request_id: u16,
+    method: u16,
+    url: u16,
+    body: u16,
+    status: u16,
+}
+
+impl RequestsTableColumnWidths {
+    pub const TABLE_COLUMN_REQ_ID: &str = "ReqId";
+    pub const TABLE_COLUMN_METHOD: &str = "Method";
+    pub const TABLE_COLUMN_URL: &str = "URL";
+    pub const TABLE_COLUMN_BODY: &str = "Body";
+    pub const TABLE_COLUMN_STATUS: &str = "Status";
+
+    pub fn update(&mut self, row: RequestEntryRow) {
+        self.request_id = self.request_id.max(row.request_id.len() as u16);
+        self.method = self.method.max(row.method.len() as u16);
+        self.url = self.url.max(row.url.len() as u16);
+        self.body = self.body.max(row.body.len() as u16);
+        self.status = self.status.max(row.status.len() as u16);
+    }
+
+    pub fn to_table_widths(&self) -> [Constraint; 5] {
+        [
+            Constraint::Length(self.request_id),
+            Constraint::Length(self.method),
+            Constraint::Length(self.url),
+            Constraint::Min(self.body),
+            Constraint::Length(self.status),
+        ]
+    }
+}
+
+impl Default for RequestsTableColumnWidths {
+    fn default() -> Self {
+        let mut widths = Self {
+            request_id: 0,
+            method: 0,
+            url: 0,
+            body: 0,
+            status: 0,
+        };
+        widths.update(RequestEntryRow {
+            request_id: Self::TABLE_COLUMN_REQ_ID.to_string(),
+            method: Self::TABLE_COLUMN_METHOD.to_string(),
+            url: Self::TABLE_COLUMN_URL.to_string(),
+            body: Self::TABLE_COLUMN_BODY.to_string(),
+            status: Self::TABLE_COLUMN_STATUS.to_string(),
+        });
+        widths
+    }
+}
 
 pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), ServerError>>>,
@@ -66,11 +166,12 @@ pub struct App {
     message_rx: Option<mpsc::Receiver<ProxyMessage>>,
     config: Config,
     screen: Box<dyn Screen>,
+    request_store: RequestStore,
+    clipboard: Clipboard,
+    waiting_messages: bool,
+    requests_table_column_widths: SharedRequestsTableColumnWidths,
     running: bool,
     exit_error: Option<anyhow::Error>,
-    waiting_messages: bool,
-    request_store: RequestStore,
-    clipboard_store: ClipboardStore,
 }
 
 impl App {
@@ -82,8 +183,10 @@ impl App {
             config.server_port,
         ));
         let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
-        let system_clipboard = Clipboard::new()?;
-        let clipboard_store = ClipboardStore::new(Mutex::new(system_clipboard));
+        let system_clipboard = crate::clipboard::Clipboard::new()?;
+        let clipboard = Clipboard::new(Mutex::new(system_clipboard));
+        let requests_table_column_widths =
+            SharedRequestsTableColumnWidths::new(Mutex::new(RequestsTableColumnWidths::default()));
 
         Ok(Self {
             abort_app_rx: None,
@@ -91,12 +194,24 @@ impl App {
             message_rx: None,
             config,
             screen,
+            request_store,
+            clipboard,
+            waiting_messages: true,
+            requests_table_column_widths,
             running: true,
             exit_error: None,
-            waiting_messages: true,
-            request_store,
-            clipboard_store,
         })
+    }
+
+    fn make_requests_screen(&self) -> RequestsScreen {
+        RequestsScreen::new(
+            self.request_store.clone(),
+            self.requests_table_column_widths.clone(),
+        )
+    }
+
+    fn make_http_client_screen(&self, request_entry: RequestEntry) -> HttpClientScreen {
+        HttpClientScreen::new(self.clipboard.clone(), request_entry)
     }
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
@@ -241,6 +356,7 @@ impl App {
 
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
+            Message::ShowRequestsScreen => self.show_requests_screen(),
             Message::ShowHttpClientScreen(request_entry) => {
                 self.show_http_client_screen(*request_entry)
             }
@@ -257,17 +373,22 @@ impl App {
         }
     }
 
+    fn show_requests_screen(&mut self) -> Option<Message> {
+        self.screen = Box::new(self.make_requests_screen());
+        self.screen.update(Message::RequestsScreen(
+            RequestsScreenMessage::UpdateTableState,
+        ))
+    }
+
     fn show_http_client_screen(&mut self, request_entry: RequestEntry) -> Option<Message> {
-        self.screen = Box::new(HttpClientScreen::new(
-            self.clipboard_store.clone(),
-            request_entry,
-        ));
+        let screen = self.make_http_client_screen(request_entry);
+        self.screen = Box::new(screen);
         None
     }
 
     fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
         if self.waiting_messages {
-            self.screen = Box::new(RequestsScreen::new(self.request_store.clone()));
+            self.screen = Box::new(self.make_requests_screen());
             self.waiting_messages = false;
         }
 
@@ -280,10 +401,11 @@ impl App {
                 };
                 store.insert(request_id, request_entry.clone());
 
-                Some(
-                    RequestsScreenMessage::UpdateTableState(Box::new((&request_entry).into()))
-                        .into(),
-                )
+                if let Ok(mut widths) = self.requests_table_column_widths.lock() {
+                    widths.update((&request_entry).into());
+                }
+
+                Some(RequestsScreenMessage::UpdateTableState.into())
             }
             Err(_) => Some(Message::Quit),
         }
@@ -295,12 +417,11 @@ impl App {
                 if let Some(request_entry) = store.get_mut(&request_id) {
                     request_entry.response = Some(response);
 
-                    return Some(
-                        RequestsScreenMessage::UpdateTableState(Box::new(
-                            request_entry.deref().into(),
-                        ))
-                        .into(),
-                    );
+                    if let Ok(mut widths) = self.requests_table_column_widths.lock() {
+                        widths.update(request_entry.deref().into());
+                    }
+
+                    return Some(RequestsScreenMessage::UpdateTableState.into());
                 }
                 None
             }
@@ -365,15 +486,7 @@ mod tests {
             body: Body::new(vec![]),
         };
         let store_message = Message::StoreRequest(Box::new((request_id, request.clone())));
-        let expected_message =
-            Message::RequestsScreen(RequestsScreenMessage::UpdateTableState(Box::new(
-                (&RequestEntry {
-                    request_id,
-                    request: request.clone(),
-                    response: None,
-                })
-                    .into(),
-            )));
+        let expected_message = Message::RequestsScreen(RequestsScreenMessage::UpdateTableState);
 
         let message = app.update(store_message);
 
@@ -396,15 +509,7 @@ mod tests {
             body: Body::new(vec![]),
         };
         let store_message = Message::StoreResponse(Box::new((request_id, response.clone())));
-        let expected_message =
-            Message::RequestsScreen(RequestsScreenMessage::UpdateTableState(Box::new(
-                (&RequestEntry {
-                    request_id,
-                    request,
-                    response: Some(response),
-                })
-                    .into(),
-            )));
+        let expected_message = Message::RequestsScreen(RequestsScreenMessage::UpdateTableState);
 
         let message = app.update(store_message);
 
