@@ -382,7 +382,7 @@ impl HttpClientScreen {
     }
 
     fn draw_status_bar(&self, frame: &mut Frame, area: Rect) {
-        let text = "Press 'backspace' to go back, 'yy' to copy selected value to clipboard. Use arrow keys or 'h', 'j', 'k', 'l' to navigate.";
+        let text = "Press 'backspace' to go back, 'yy' to copy selected value to clipboard. Use arrow keys or h/j/k/l to navigate.";
         let bordered_text = BorderedText::new(text);
         frame.render_widget(bordered_text, area);
     }
