@@ -242,11 +242,13 @@ impl App {
             ProxyMessage::ResponseReceived((id, response)) => {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
-            ProxyMessage::ErrorOccurred((_request_id, _error)) => {
-                return Some(Message::ShowErrorModal(format!(
-                    "Error occurred for request {:?}: {:?}",
-                    _request_id, _error
-                )));
+            ProxyMessage::ErrorOccurred((request_id, error)) => {
+                let text = if let Some(request_id) = request_id {
+                    format!("Error occurred for request {}: {:#?}", request_id, error)
+                } else {
+                    format!("Error occurred: {:#?}", error)
+                };
+                return Some(Message::ShowErrorModal(text));
             }
             _ => {}
         }
