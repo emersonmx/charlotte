@@ -6,7 +6,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{
         Block, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
-        Table, TableState, Widget, Wrap,
+        Table, TableState, Widget,
     },
 };
 
@@ -61,10 +61,7 @@ impl Widget for BorderedText {
             block = block.style(self.focus_style);
         }
 
-        let paragraph = Paragraph::new(self.text)
-            .scroll(self.scroll)
-            .block(block)
-            .wrap(Wrap { trim: true });
+        let paragraph = Paragraph::new(self.text).scroll(self.scroll).block(block);
         paragraph.render(area, buf);
     }
 }

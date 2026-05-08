@@ -10,10 +10,13 @@ use ratatui::{
     widgets::{Scrollbar, ScrollbarState},
 };
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     ScrollUp,
     ScrollDown,
+    ScrollLeft,
+    ScrollRight,
 }
 
 impl From<Message> for AppMessage {
@@ -24,27 +27,46 @@ impl From<Message> for AppMessage {
 
 pub struct ErrorModal {
     content: String,
-    scrollbar_state: ScrollbarState,
+    scrollbar_vertical_state: ScrollbarState,
+    scrollbar_horizontal_state: ScrollbarState,
 }
 
 #[allow(dead_code)]
 impl ErrorModal {
+    const X_SCROLL_STEP: usize = 10;
+
     pub fn new(content: &str) -> Self {
-        let scrollbar_state = ScrollbarState::default();
+        let scrollbar_vertical_state = ScrollbarState::default();
+        let scrollbar_horizontal_state = ScrollbarState::default();
 
         Self {
             content: content.to_string(),
-            scrollbar_state,
+            scrollbar_vertical_state,
+            scrollbar_horizontal_state,
         }
     }
 
     fn scroll_up(&mut self) -> Option<AppMessage> {
-        self.scrollbar_state.prev();
+        self.scrollbar_vertical_state.prev();
         None
     }
 
     fn scroll_down(&mut self) -> Option<AppMessage> {
-        self.scrollbar_state.next();
+        self.scrollbar_vertical_state.next();
+        None
+    }
+
+    fn scroll_left(&mut self) -> Option<AppMessage> {
+        for _ in 0..Self::X_SCROLL_STEP {
+            self.scrollbar_horizontal_state.prev();
+        }
+        None
+    }
+
+    fn scroll_right(&mut self) -> Option<AppMessage> {
+        for _ in 0..Self::X_SCROLL_STEP {
+            self.scrollbar_horizontal_state.next();
+        }
         None
     }
 }
@@ -56,18 +78,33 @@ impl Screen for ErrorModal {
             vertical: (area.height as f32 * 0.4).ceil() as u16,
             horizontal: (area.width as f32 * 0.35).ceil() as u16,
         });
-        let content_length = textwrap::wrap(&self.content, area.width as usize).len();
-        area.height = area.height.min(content_length as u16 + 2);
+        let wrapped_content = textwrap::wrap(&self.content, area.width as usize);
+        area.height = area.height.min(wrapped_content.len() as u16 + 2);
 
-        self.scrollbar_state = self
-            .scrollbar_state
-            .content_length(content_length.saturating_sub(area.height as usize - 4));
+        self.scrollbar_horizontal_state = self.scrollbar_horizontal_state.content_length(
+            wrapped_content
+                .iter()
+                .map(|line| line.chars().count())
+                .max()
+                .unwrap_or(0),
+        );
+        self.scrollbar_vertical_state = self.scrollbar_vertical_state.content_length(
+            wrapped_content
+                .len()
+                .saturating_sub(area.height as usize - 4),
+        );
 
         let bordered_text = BorderedText::new(self.content.clone())
             .title(Some("Error".to_string()))
             .scroll((
-                self.scrollbar_state.get_position().try_into().unwrap_or(0),
-                0,
+                self.scrollbar_vertical_state
+                    .get_position()
+                    .try_into()
+                    .unwrap_or(0),
+                self.scrollbar_horizontal_state
+                    .get_position()
+                    .try_into()
+                    .unwrap_or(0),
             ))
             .focused(true)
             .focus_style(theme::styles::error());
@@ -82,7 +119,19 @@ impl Screen for ErrorModal {
                 vertical: 1,
                 horizontal: 0,
             }),
-            &mut self.scrollbar_state,
+            &mut self.scrollbar_vertical_state,
+        );
+
+        let scrollbar = Scrollbar::default()
+            .orientation(ratatui::widgets::ScrollbarOrientation::HorizontalBottom)
+            .style(theme::styles::error());
+        frame.render_stateful_widget(
+            scrollbar,
+            area.inner(Margin {
+                vertical: 0,
+                horizontal: 1,
+            }),
+            &mut self.scrollbar_horizontal_state,
         );
     }
 
@@ -95,6 +144,8 @@ impl Screen for ErrorModal {
             match key_event.code {
                 KeyCode::Up | KeyCode::Char('k') => return Some(Message::ScrollUp.into()),
                 KeyCode::Down | KeyCode::Char('j') => return Some(Message::ScrollDown.into()),
+                KeyCode::Left | KeyCode::Char('h') => return Some(Message::ScrollLeft.into()),
+                KeyCode::Right | KeyCode::Char('l') => return Some(Message::ScrollRight.into()),
                 _ => return Some(AppMessage::CloseModal),
             }
         }
@@ -111,6 +162,8 @@ impl Screen for ErrorModal {
         match message {
             Message::ScrollUp => self.scroll_up(),
             Message::ScrollDown => self.scroll_down(),
+            Message::ScrollLeft => self.scroll_left(),
+            Message::ScrollRight => self.scroll_right(),
         }
     }
 }
