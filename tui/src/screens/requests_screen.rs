@@ -40,7 +40,7 @@ pub struct RequestEntryRow {
 impl From<&RequestEntry> for RequestEntryRow {
     fn from(entry: &RequestEntry) -> Self {
         let status = if let Some(response) = &entry.response {
-            response.status.as_u16().to_string()
+            response.status.to_string()
         } else {
             "Pending".to_string()
         };
