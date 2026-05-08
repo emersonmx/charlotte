@@ -141,9 +141,8 @@ impl Screen for RequestsScreen {
             &mut self.table_scroll_state,
         );
 
-        let status_bar_text = BorderedText::new(
-            "Press 'q' to quit, 'j'/'k' or arrow keys to navigate, 'l' or Enter to view details",
-        );
+        let text = "Arrow keys or j/k to navigate, Enter to view details. q to quit.";
+        let status_bar_text = BorderedText::new(text);
         frame.render_widget(status_bar_text, status_area);
     }
 
@@ -156,7 +155,7 @@ impl Screen for RequestsScreen {
             match key_event.code {
                 KeyCode::Up | KeyCode::Char('k') => return Some(Message::SelectPreviousRow.into()),
                 KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
-                KeyCode::Enter | KeyCode::Char('l') => {
+                KeyCode::Enter => {
                     let selected = self.table_state.selected()?;
                     let store = self.request_store.lock().ok()?;
                     let request_entry = store.values().nth(selected).cloned()?;
