@@ -356,10 +356,11 @@ impl HttpClientScreen {
 
     fn draw_body(&mut self, frame: &mut Frame, area: Rect, body: &[u8], select_index: usize) {
         let title = Line::from(format!(
-            "[{}]{}{}",
+            "[{}]{}{} ({} bytes)",
             select_index,
             symbols::line::HORIZONTAL,
-            Self::BODY_LABEL
+            Self::BODY_LABEL,
+            body.len()
         ));
         let body_string = String::from_utf8_lossy(body);
         let mut block = Block::bordered().title(title);
