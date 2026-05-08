@@ -134,6 +134,7 @@ impl Widget for Tabs {
 pub struct KeyValueTableState {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
+    is_highlighted: bool,
 }
 
 impl KeyValueTableState {
@@ -154,6 +155,13 @@ impl KeyValueTableState {
     pub fn select_previous(&mut self) {
         self.table_state.select_previous();
         self.scrollbar_state.prev();
+    }
+
+    pub fn set_highlighted(&mut self, highlighted: bool) {
+        self.is_highlighted = highlighted;
+        if self.is_highlighted && self.table_state.selected().is_none() {
+            self.table_state.select(Some(0));
+        }
     }
 }
 
@@ -208,8 +216,10 @@ impl StatefulWidget for KeyValueTable<'_> {
         let mut table = Table::default()
             .rows(self.rows)
             .widths(self.widths)
-            .column_spacing(3)
-            .row_highlight_style(theme::styles::highlight());
+            .column_spacing(3);
+        if state.is_highlighted {
+            table = table.row_highlight_style(theme::styles::highlight());
+        }
         if let Some(block) = self.block {
             table = table.block(block);
         }

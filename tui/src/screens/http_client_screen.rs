@@ -384,21 +384,6 @@ impl HttpClientScreen {
         frame.render_widget(bordered_text, area);
     }
 
-    fn select_next_tab(&mut self) -> Option<AppMessage> {
-        self.tab_selected = match self.tab_selected {
-            Tab::Request => Tab::Response,
-            Tab::Response => self.tab_selected.clone(),
-        };
-        self.section_selected = match self.section_selected {
-            Section::Method | Section::Url => self.section_selected.clone(),
-            _ => match self.tab_selected {
-                Tab::Request => self.request_section_selected.clone().into(),
-                Tab::Response => self.response_section_selected.clone().into(),
-            },
-        };
-        None
-    }
-
     fn copy_selected_to_clipboard(&mut self) -> Option<AppMessage> {
         let request_entry = &self.request_entry;
 
@@ -484,7 +469,43 @@ impl HttpClientScreen {
                 Tab::Response => self.response_section_selected.clone().into(),
             },
         };
+        self.highlight_selected();
         None
+    }
+
+    fn select_next_tab(&mut self) -> Option<AppMessage> {
+        self.tab_selected = match self.tab_selected {
+            Tab::Request => Tab::Response,
+            Tab::Response => self.tab_selected.clone(),
+        };
+        self.section_selected = match self.section_selected {
+            Section::Method | Section::Url => self.section_selected.clone(),
+            _ => match self.tab_selected {
+                Tab::Request => self.request_section_selected.clone().into(),
+                Tab::Response => self.response_section_selected.clone().into(),
+            },
+        };
+        self.highlight_selected();
+        None
+    }
+
+    fn highlight_selected(&mut self) {
+        self.query_params_table_state.set_highlighted(false);
+        self.request_headers_table_state.set_highlighted(false);
+        self.response_headers_table_state.set_highlighted(false);
+
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => self.query_params_table_state.set_highlighted(true),
+                Section::Headers => self.request_headers_table_state.set_highlighted(true),
+                _ => {}
+            },
+            Tab::Response => {
+                if self.section_selected == Section::Headers {
+                    self.response_headers_table_state.set_highlighted(true)
+                }
+            }
+        };
     }
 
     fn select_section(&mut self, section_index: usize) -> Option<AppMessage> {
@@ -504,6 +525,8 @@ impl HttpClientScreen {
             2 => Section::Url,
             _ => self.section_selected.clone(),
         };
+
+        self.highlight_selected();
 
         None
     }
