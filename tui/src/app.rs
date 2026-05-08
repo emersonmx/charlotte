@@ -1,9 +1,10 @@
 use crate::{
     clipboard::Clipboard,
     config::Config,
-    http_client_screen::{HttpClientScreen, Message as HttpClientScreenMessage},
-    requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
-    waiting_screen::WaitingScreen,
+    screens::{
+        HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
+        WaitingScreen,
+    },
 };
 use crossterm::event::{Event, EventStream};
 use proxy::{

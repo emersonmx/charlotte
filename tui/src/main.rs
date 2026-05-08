@@ -7,10 +7,8 @@ mod app;
 mod cli;
 mod clipboard;
 mod config;
-mod http_client_screen;
-mod requests_screen;
+mod screens;
 mod theme;
-mod waiting_screen;
 mod widgets;
 
 #[tokio::main]
