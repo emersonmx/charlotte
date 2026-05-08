@@ -1,4 +1,5 @@
 use crate::{
+    clipboard::Clipboard,
     config::Config,
     http_client_screen::{HttpClientScreen, Message as HttpClientScreenMessage},
     requests_screen::{Message as RequestsScreenMessage, RequestsScreen},
@@ -34,6 +35,7 @@ pub enum Message {
     ShowHttpClientScreen(Box<RequestEntry>),
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
+    CopyToClipboard(String),
     Quit,
     RequestsScreen(RequestsScreenMessage),
     HttpClientScreen(HttpClientScreenMessage),
@@ -168,7 +170,6 @@ impl Default for RequestsTableColumnWidths {
 }
 
 pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
-pub type Clipboard = Arc<Mutex<crate::clipboard::Clipboard>>;
 pub type SharedRequestsTableColumnWidths = Arc<Mutex<RequestsTableColumnWidths>>;
 
 pub struct App {
@@ -194,8 +195,7 @@ impl App {
             config.server_port,
         ));
         let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
-        let system_clipboard = crate::clipboard::Clipboard::new()?;
-        let clipboard = Clipboard::new(Mutex::new(system_clipboard));
+        let clipboard = Clipboard::new()?;
         let requests_table_column_widths =
             SharedRequestsTableColumnWidths::new(Mutex::new(RequestsTableColumnWidths::default()));
 
@@ -222,7 +222,7 @@ impl App {
     }
 
     fn make_http_client_screen(&self, request_entry: RequestEntry) -> HttpClientScreen {
-        HttpClientScreen::new(self.clipboard.clone(), request_entry)
+        HttpClientScreen::new(request_entry)
     }
 
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
@@ -379,6 +379,7 @@ impl App {
                 let (request_id, response) = *message;
                 self.store_response(request_id, response)
             }
+            Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
             message => self.screen.update(message),
         }
@@ -438,6 +439,12 @@ impl App {
             }
             Err(_) => Some(Message::Quit),
         }
+    }
+
+    fn copy_to_clipboard(&mut self, content: String) -> Option<Message> {
+        // TODO: Show error message in the UI
+        self.clipboard.set_text(content).ok()?;
+        None
     }
 
     fn quit(&mut self) -> Option<Message> {

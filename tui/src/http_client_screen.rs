@@ -1,5 +1,5 @@
 use crate::{
-    app::{Clipboard, Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
+    app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
     theme,
     widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
@@ -149,7 +149,6 @@ impl From<HeaderMap> for TableColumnWidths {
 }
 
 pub struct HttpClientScreen {
-    clipboard: Clipboard,
     request_entry: RequestEntry,
     tab_selected: Tab,
     section_selected: Section,
@@ -172,7 +171,7 @@ impl HttpClientScreen {
     const HEADERS_LABEL: &str = "Headers";
     const BODY_LABEL: &str = "Body";
 
-    pub fn new(clipboard: Clipboard, request_entry: RequestEntry) -> Self {
+    pub fn new(request_entry: RequestEntry) -> Self {
         let request_query_params_column_widths = request_entry.request.url.query_pairs().into();
         let query_params_table_state = {
             let count = request_entry.request.url.query_pairs().len();
@@ -209,7 +208,6 @@ impl HttpClientScreen {
         };
 
         Self {
-            clipboard,
             request_entry,
             tab_selected: Tab::Request,
             section_selected: Section::default(),
@@ -413,12 +411,7 @@ impl HttpClientScreen {
             _ => String::default(),
         };
 
-        if let Ok(mut store) = self.clipboard.lock() {
-            // TODO: Show error message if copy fails
-            let _ = store.set_text(text);
-        }
-
-        None
+        Some(AppMessage::CopyToClipboard(text))
     }
 
     fn get_query_param_selected(&self) -> String {
