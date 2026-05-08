@@ -237,11 +237,11 @@ impl HttpClientScreen {
     fn draw_method(&self, frame: &mut Frame, area: Rect) {
         let text = self.request_entry.request.method.to_string();
         let bordered_text = BorderedText::new(text)
-            .title(format!(
+            .title(Some(format!(
                 "[1]{}{}",
                 symbols::line::HORIZONTAL,
                 Self::METHOD_LABEL
-            ))
+            )))
             .focused(self.section_selected == Section::Method);
 
         frame.render_widget(bordered_text, area);
@@ -250,11 +250,11 @@ impl HttpClientScreen {
     fn draw_url(&self, frame: &mut Frame, area: Rect) {
         let text = self.request_entry.request.url.to_string();
         let bordered_text = BorderedText::new(text)
-            .title(format!(
+            .title(Some(format!(
                 "[2]{}{}",
                 symbols::line::HORIZONTAL,
                 Self::URL_LABEL
-            ))
+            )))
             .focused(self.section_selected == Section::Url);
 
         frame.render_widget(bordered_text, area);

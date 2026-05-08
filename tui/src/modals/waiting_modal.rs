@@ -1,16 +1,11 @@
 use crate::{
     app::{Message as AppMessage, Screen, is_quit_key_event},
-    widgets::BorderedText,
+    widgets::{BorderedText, centered_area},
 };
 use crossterm::event::Event;
-use ratatui::{Frame, layout::Rect};
+use ratatui::Frame;
 
-fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
-    let x = area.x + (area.width.saturating_sub(width)) / 2;
-    let y = area.y + (area.height.saturating_sub(height)) / 2;
-    Rect::new(x, y, width, height)
-}
-
+#[derive(Debug, Clone, PartialEq)]
 pub struct WaitingModal {
     server_host: String,
     server_port: u16,

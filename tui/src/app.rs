@@ -1,7 +1,7 @@
 use crate::{
     clipboard::Clipboard,
     config::Config,
-    modals::WaitingModal,
+    modals::{ErrorModal, ErrorModalMessage, WaitingModal},
     screens::{
         HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
         RequestsScreenState,
@@ -32,12 +32,15 @@ pub enum Message {
     // Global
     ShowRequestsScreen,
     ShowHttpClientScreen,
-    CloseModal,
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
     StoreRequestsScreenState(Box<RequestsScreenState>),
     CopyToClipboard(String),
     Quit,
+    // Modal-specific
+    ShowErrorModal(String),
+    CloseModal,
+    ErrorModal(ErrorModalMessage),
     // Screen-specific
     RequestsScreen(RequestsScreenMessage),
     HttpClientScreen(HttpClientScreenMessage),
@@ -240,15 +243,10 @@ impl App {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
             ProxyMessage::ErrorOccurred((_request_id, _error)) => {
-                // TODO: We should probably display the error in the UI
-                // instead of just quitting the app
-                // self.exit_error = Some(anyhow::anyhow!(
-                //     "Error occurred for request {:?}: {:?}",
-                //     request_id,
-                //     error
-                // ));
-                // return Some(Message::Quit);
-                return None;
+                return Some(Message::ShowErrorModal(format!(
+                    "Error occurred for request {:?}: {:?}",
+                    _request_id, _error
+                )));
             }
             _ => {}
         }
@@ -279,7 +277,6 @@ impl App {
         match message {
             Message::ShowRequestsScreen => self.show_requests_screen(),
             Message::ShowHttpClientScreen => self.show_http_client_screen(),
-            Message::CloseModal => self.close_modal(),
             Message::StoreRequest(message) => self.store_request(*message),
             Message::StoreResponse(message) => self.store_response(*message),
             Message::StoreRequestsScreenState(message) => {
@@ -287,6 +284,8 @@ impl App {
             }
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
+            Message::ShowErrorModal(content) => self.show_error_modal(content),
+            Message::CloseModal => self.close_modal(),
             message => self.update_modal_and_screen(message),
         }
     }
@@ -306,11 +305,6 @@ impl App {
 
         let screen = self.make_http_client_screen(request_entry);
         self.screen = Box::new(screen);
-        None
-    }
-
-    fn close_modal(&mut self) -> Option<Message> {
-        self.modal = None;
         None
     }
 
@@ -352,14 +346,28 @@ impl App {
     }
 
     fn copy_to_clipboard(&mut self, content: String) -> Option<Message> {
-        // TODO: Show error message in the UI
-        self.clipboard.set_text(content).ok()?;
-        None
+        match self.clipboard.set_text(content) {
+            Ok(_) => None,
+            Err(e) => Some(Message::ShowErrorModal(format!(
+                "Failed to copy to clipboard: {}",
+                e
+            ))),
+        }
     }
 
     fn quit(&mut self) -> Option<Message> {
         self.running = false;
         self.abort_server_tx.take().map(|tx| tx.send(()));
+        None
+    }
+
+    fn show_error_modal(&mut self, content: String) -> Option<Message> {
+        self.modal = Some(Box::new(ErrorModal::new(&content)));
+        None
+    }
+
+    fn close_modal(&mut self) -> Option<Message> {
+        self.modal = None;
         None
     }
 

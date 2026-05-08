@@ -6,28 +6,32 @@ use ratatui::{
     text::{Line, Span},
     widgets::{
         Block, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
-        Table, TableState, Widget,
+        Table, TableState, Widget, Wrap,
     },
 };
 
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct BorderedText {
-    title: String,
+    title: Option<String>,
     text: String,
     is_focused: bool,
+    focus_style: Style,
+    scroll: (u16, u16),
 }
 
 impl BorderedText {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
-            title: String::new(),
+            title: None,
             text: text.into(),
             is_focused: false,
+            focus_style: theme::styles::highlight_fg(),
+            scroll: (0, 0),
         }
     }
 
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = title.into();
+    pub fn title(mut self, title: Option<String>) -> Self {
+        self.title = title;
         self
     }
 
@@ -35,16 +39,32 @@ impl BorderedText {
         self.is_focused = is_focused;
         self
     }
+
+    pub fn focus_style(mut self, style: Style) -> Self {
+        self.focus_style = style;
+        self
+    }
+
+    pub fn scroll(mut self, scroll: (u16, u16)) -> Self {
+        self.scroll = scroll;
+        self
+    }
 }
 
 impl Widget for BorderedText {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let mut block = Block::bordered().title(self.title);
+        let mut block = Block::bordered();
+        if let Some(title) = self.title {
+            block = block.title(title);
+        }
         if self.is_focused {
-            block = block.style(theme::styles::highlight_fg());
+            block = block.style(self.focus_style);
         }
 
-        let paragraph = Paragraph::new(self.text).block(block);
+        let paragraph = Paragraph::new(self.text)
+            .scroll(self.scroll)
+            .block(block)
+            .wrap(Wrap { trim: true });
         paragraph.render(area, buf);
     }
 }
@@ -285,4 +305,10 @@ impl StatefulWidget for TextArea<'_> {
             &mut state.scrollbar_state,
         );
     }
+}
+
+pub(crate) fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect::new(x, y, width, height)
 }
