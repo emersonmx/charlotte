@@ -242,12 +242,13 @@ impl App {
             ProxyMessage::ErrorOccurred((request_id, error)) => {
                 // TODO: We should probably display the error in the UI
                 // instead of just quitting the app
-                self.exit_error = Some(anyhow::anyhow!(
-                    "Error occurred for request {:?}: {:?}",
-                    request_id,
-                    error
-                ));
-                return Some(Message::Quit);
+                // self.exit_error = Some(anyhow::anyhow!(
+                //     "Error occurred for request {:?}: {:?}",
+                //     request_id,
+                //     error
+                // ));
+                // return Some(Message::Quit);
+                return None;
             }
             _ => {}
         }
