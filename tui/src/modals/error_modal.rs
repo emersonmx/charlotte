@@ -6,7 +6,7 @@ use crate::{
 use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
-    layout::Margin,
+    layout::{Constraint, Margin},
     widgets::{Scrollbar, ScrollbarState},
 };
 
@@ -74,27 +74,24 @@ impl ErrorModal {
 impl Screen for ErrorModal {
     fn draw(&mut self, frame: &mut Frame) {
         let area = frame.area();
-        let mut area = area.inner(Margin {
-            vertical: (area.height as f32 * 0.4).ceil() as u16,
-            horizontal: (area.width as f32 * 0.35).ceil() as u16,
-        });
-        let wrapped_content = textwrap::wrap(&self.content, area.width as usize);
-        area.height = area.height.min(wrapped_content.len() as u16 + 2);
-
-        self.scrollbar_horizontal_state = self.scrollbar_horizontal_state.content_length(
-            wrapped_content
-                .iter()
-                .map(|line| line.chars().count())
-                .max()
-                .unwrap_or(0),
-        );
-        self.scrollbar_vertical_state = self.scrollbar_vertical_state.content_length(
-            wrapped_content
-                .len()
-                .saturating_sub(area.height as usize - 4),
+        let max_width = area.width as usize / 3;
+        let max_height = area.height as usize / 4;
+        let content = &self.content;
+        let message_width = content.lines().map(|line| line.len()).max().unwrap_or(0);
+        let message_height = content.lines().count();
+        let area = area.centered(
+            Constraint::Max(message_width.min(max_width) as u16 + 2),
+            Constraint::Max(message_height.min(max_height) as u16 + 2),
         );
 
-        let bordered_text = BorderedText::new(self.content.clone())
+        self.scrollbar_horizontal_state = self
+            .scrollbar_horizontal_state
+            .content_length(message_width.saturating_sub(max_width) + 1);
+        self.scrollbar_vertical_state = self
+            .scrollbar_vertical_state
+            .content_length(message_height.saturating_sub(max_height) + 1);
+
+        let bordered_text = BorderedText::new(content)
             .title(Some("Error".to_string()))
             .scroll((
                 self.scrollbar_vertical_state

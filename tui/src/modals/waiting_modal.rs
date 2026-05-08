@@ -1,9 +1,9 @@
 use crate::{
     app::{Message as AppMessage, Screen, is_quit_key_event},
-    widgets::{BorderedText, centered_area},
+    widgets::BorderedText,
 };
 use crossterm::event::Event;
-use ratatui::Frame;
+use ratatui::{Frame, layout::Constraint};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WaitingModal {
@@ -22,18 +22,24 @@ impl WaitingModal {
 
 impl Screen for WaitingModal {
     fn draw(&mut self, frame: &mut Frame) {
+        let area = frame.area();
+        let line_length = area.width as usize / 3;
         let message = format!(
             "Waiting for requests on {}:{} (press 'q' to quit)",
             self.server_host, self.server_port
         );
-        let border_padding = 2;
-        let (x_padding, y_padding) = (2, 1);
-        let width = message.chars().count() as u16 + (x_padding + border_padding);
-        let height = y_padding + border_padding;
-        let centered_area = centered_area(frame.area(), width, height);
+        let message = textwrap::wrap(&message, line_length);
+        let message_width = line_length as u16 + 2;
+        let message_height = message.len() as u16 + 2;
+        let area = area.centered(
+            Constraint::Max(message_width),
+            Constraint::Max(message_height),
+        );
 
-        let bordered_text = BorderedText::new(message).focused(true).centered();
-        frame.render_widget(bordered_text, centered_area);
+        let bordered_text = BorderedText::new(message.join("\n"))
+            .focused(true)
+            .centered();
+        frame.render_widget(bordered_text, area);
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
