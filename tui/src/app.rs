@@ -279,14 +279,8 @@ impl App {
             Message::ShowRequestsScreen => self.show_requests_screen(),
             Message::ShowHttpClientScreen => self.show_http_client_screen(),
             Message::CloseModal => self.close_modal(),
-            Message::StoreRequest(message) => {
-                let (request_id, request) = *message;
-                self.store_request(request_id, request)
-            }
-            Message::StoreResponse(message) => {
-                let (request_id, response) = *message;
-                self.store_response(request_id, response)
-            }
+            Message::StoreRequest(message) => self.store_request(*message),
+            Message::StoreResponse(message) => self.store_response(*message),
             Message::StoreRequestsScreenState(message) => {
                 self.store_requests_screen_state(*message)
             }
@@ -319,7 +313,8 @@ impl App {
         None
     }
 
-    fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
+    fn store_request(&mut self, message: (RequestId, Request)) -> Option<Message> {
+        let (request_id, request) = message;
         match self.request_store.lock() {
             Ok(mut store) => {
                 let request_entry = RequestEntry {
@@ -335,7 +330,8 @@ impl App {
         }
     }
 
-    fn store_response(&mut self, request_id: RequestId, response: Response) -> Option<Message> {
+    fn store_response(&mut self, message: (RequestId, Response)) -> Option<Message> {
+        let (request_id, response) = message;
         match self.request_store.lock() {
             Ok(mut store) => {
                 if let Some(request_entry) = store.get_mut(&request_id) {
@@ -367,15 +363,14 @@ impl App {
     }
 
     fn update_screen_and_modal(&mut self, message: Message) -> Option<Message> {
-        let modal_message = if let Some(modal) = self.modal.as_mut() {
-            modal.update(message.clone())
-        } else {
-            None
-        };
+        if let Some(modal) = self.modal.as_mut() {
+            let mut current_message = modal.update(message.clone());
+            while let Some(message) = current_message {
+                current_message = self.update(message);
+            }
+        }
 
-        let screen_message = self.screen.update(message);
-
-        modal_message.or(screen_message)
+        self.screen.update(message)
     }
 }
 
@@ -394,7 +389,7 @@ mod tests {
     use super::*;
     use insta::assert_snapshot;
     use proxy::http::{Body, HeaderMap, Method};
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, widgets::TableState};
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -449,7 +444,7 @@ mod tests {
             headers: HeaderMap::new(vec![]),
             body: Body::new(vec![]),
         };
-        app.store_request(request_id, request.clone());
+        app.store_request((request_id, request.clone()));
         let response = Response {
             status: 200.try_into().unwrap(),
             headers: HeaderMap::new(vec![]),
@@ -481,7 +476,17 @@ mod tests {
 
         let message = app.update(non_app_message);
 
-        assert_eq!(message, None);
+        assert_eq!(
+            message,
+            Some(Message::StoreRequestsScreenState(
+                RequestsScreenState {
+                    selected_request_entry: Some(0),
+                    table_state: TableState::default().with_selected(Some(0)),
+                    ..Default::default()
+                }
+                .into()
+            ))
+        );
     }
 
     #[tokio::test]
