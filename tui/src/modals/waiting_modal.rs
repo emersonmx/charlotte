@@ -3,12 +3,7 @@ use crate::{
     widgets::BorderedText,
 };
 use crossterm::event::Event;
-use ratatui::{
-    Frame,
-    layout::Rect,
-    text::Text,
-    widgets::{Block, Paragraph},
-};
+use ratatui::{Frame, layout::Rect};
 
 fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
     let x = area.x + (area.width.saturating_sub(width)) / 2;

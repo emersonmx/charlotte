@@ -239,7 +239,7 @@ impl App {
             ProxyMessage::ResponseReceived((id, response)) => {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
-            ProxyMessage::ErrorOccurred((request_id, error)) => {
+            ProxyMessage::ErrorOccurred((_request_id, _error)) => {
                 // TODO: We should probably display the error in the UI
                 // instead of just quitting the app
                 // self.exit_error = Some(anyhow::anyhow!(
