@@ -1,4 +1,7 @@
-use crate::app::{Message as AppMessage, Screen, is_quit_key_event};
+use crate::{
+    app::{Message as AppMessage, Screen, is_quit_key_event},
+    widgets::BorderedText,
+};
 use crossterm::event::Event;
 use ratatui::{
     Frame,
@@ -19,9 +22,9 @@ pub struct WaitingModal {
 }
 
 impl WaitingModal {
-    pub fn new(server_host: &str, server_port: u16) -> Self {
+    pub fn new(server_host: impl Into<String>, server_port: u16) -> Self {
         Self {
-            server_host: server_host.to_string(),
+            server_host: server_host.into(),
             server_port,
         }
     }
@@ -39,11 +42,8 @@ impl Screen for WaitingModal {
         let height = y_padding + border_padding;
         let centered_area = centered_area(frame.area(), width, height);
 
-        let text = Text::from(message);
-        let block = Block::bordered();
-        let paragraph = Paragraph::new(text).centered().block(block);
-
-        frame.render_widget(paragraph, centered_area);
+        let bordered_text = BorderedText::new(message).focused(true);
+        frame.render_widget(bordered_text, centered_area);
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
