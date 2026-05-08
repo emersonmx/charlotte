@@ -286,7 +286,7 @@ impl App {
             }
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
-            message => self.update_screen_and_modal(message),
+            message => self.update_modal_and_screen(message),
         }
     }
 
@@ -362,7 +362,7 @@ impl App {
         None
     }
 
-    fn update_screen_and_modal(&mut self, message: Message) -> Option<Message> {
+    fn update_modal_and_screen(&mut self, message: Message) -> Option<Message> {
         if let Some(modal) = self.modal.as_mut() {
             let mut current_message = modal.update(message.clone());
             while let Some(message) = current_message {
