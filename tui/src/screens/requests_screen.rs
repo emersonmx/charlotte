@@ -15,8 +15,9 @@ use ratatui::{
     },
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
+    UpdateTableState,
     SelectPreviousRow,
     SelectNextRow,
 }
@@ -155,14 +156,16 @@ impl RequestsScreen {
     fn request_entry_updated(&mut self, request_entry: Box<RequestEntry>) -> Option<AppMessage> {
         self.table_column_widths
             .update(request_entry.as_ref().into());
+        Some(Message::UpdateTableState.into())
+    }
 
+    fn update_table_state(&mut self) -> Option<AppMessage> {
         if self.table_state.selected().is_none() {
             self.table_state.select_first();
         }
         self.table_scroll_state = self
             .table_scroll_state
             .content_length(self.requests_length());
-
         None
     }
 
@@ -278,6 +281,7 @@ impl Screen for RequestsScreen {
         };
 
         match message {
+            Message::UpdateTableState => self.update_table_state(),
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
         }

@@ -1,10 +1,8 @@
 use crate::{
     clipboard::Clipboard,
     config::Config,
-    screens::{
-        HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
-        WaitingScreen,
-    },
+    modals::WaitingModal,
+    screens::{HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage},
 };
 use crossterm::event::{Event, EventStream};
 use proxy::{
@@ -24,13 +22,14 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     // Events
     RequestEntryUpdated(Box<RequestEntry>),
     // Global
     ShowRequestsScreen,
     ShowHttpClientScreen(Box<RequestEntry>),
+    CloseModal,
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
     CopyToClipboard(String),
@@ -62,6 +61,8 @@ pub struct RequestEntry {
     pub request: Request,
     pub response: Option<Response>,
 }
+
+pub type BoxedScreen = Box<dyn Screen>;
 pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
 
 pub struct App {
@@ -69,10 +70,10 @@ pub struct App {
     abort_server_tx: Option<oneshot::Sender<()>>,
     message_rx: Option<mpsc::Receiver<ProxyMessage>>,
     config: Config,
-    screen: Box<dyn Screen>,
+    screen: BoxedScreen,
+    modal: Option<BoxedScreen>,
     request_store: RequestStore,
     clipboard: Clipboard,
-    waiting_messages: bool,
     running: bool,
     exit_error: Option<anyhow::Error>,
 }
@@ -81,12 +82,11 @@ impl App {
     const MESSAGE_CHANNEL_BUFFER_SIZE: usize = 128;
 
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        let screen = Box::new(WaitingScreen::new(
-            config.server_host.clone(),
-            config.server_port,
-        ));
+        let modal = Box::new(WaitingModal::new(&config.server_host, config.server_port));
         let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
         let clipboard = Clipboard::new()?;
+
+        let screen = Box::new(RequestsScreen::new(request_store.clone()));
 
         Ok(Self {
             abort_app_rx: None,
@@ -94,9 +94,9 @@ impl App {
             message_rx: None,
             config,
             screen,
+            modal: Some(modal),
             request_store,
             clipboard,
-            waiting_messages: true,
             running: true,
             exit_error: None,
         })
@@ -181,6 +181,9 @@ impl App {
 
     fn draw(&mut self, frame: &mut Frame) {
         self.screen.draw(frame);
+        if let Some(modal) = self.modal.as_mut() {
+            modal.draw(frame);
+        }
     }
 
     async fn handle_event(&mut self, event_stream: &mut EventStream) -> Option<Message> {
@@ -196,7 +199,7 @@ impl App {
         tokio::select! {
             Some(event) = event_stream.next() => {
                 let event = event.ok()?;
-                self.screen.handle_event(event)
+                self.handle_event_stream(event)
             }
             Some(message) = message_rx.recv() => {
                 self.handle_proxy_message(message).await
@@ -204,6 +207,14 @@ impl App {
             result = &mut abort_app_rx => {
                 self.handle_abort_app(result).await
             }
+        }
+    }
+
+    fn handle_event_stream(&self, event: Event) -> Option<Message> {
+        if let Some(modal) = self.modal.as_ref() {
+            modal.handle_event(event)
+        } else {
+            self.screen.handle_event(event)
         }
     }
 
@@ -252,15 +263,11 @@ impl App {
 
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
-            // Events
-            Message::RequestEntryUpdated(request_entry) => {
-                self.request_entry_updated(request_entry)
-            }
-            // Global
             Message::ShowRequestsScreen => self.show_requests_screen(),
             Message::ShowHttpClientScreen(request_entry) => {
                 self.show_http_client_screen(*request_entry)
             }
+            Message::CloseModal => self.close_modal(),
             Message::StoreRequest(message) => {
                 let (request_id, request) = *message;
                 self.store_request(request_id, request)
@@ -271,24 +278,13 @@ impl App {
             }
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
-            // Screen-specific
-            message => self.screen.update(message),
+            message => self.update_screen_and_modal(message),
         }
     }
 
-    // Event update handlers
-
-    fn request_entry_updated(&mut self, request_entry: Box<RequestEntry>) -> Option<Message> {
-        let message = Message::RequestEntryUpdated(request_entry);
-        self.screen.update(message);
-        None
-    }
-
-    // Global update handlers
-
     fn show_requests_screen(&mut self) -> Option<Message> {
         self.screen = Box::new(self.make_requests_screen());
-        None
+        Some(RequestsScreenMessage::UpdateTableState.into())
     }
 
     fn show_http_client_screen(&mut self, request_entry: RequestEntry) -> Option<Message> {
@@ -297,12 +293,12 @@ impl App {
         None
     }
 
-    fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
-        if self.waiting_messages {
-            self.screen = Box::new(self.make_requests_screen());
-            self.waiting_messages = false;
-        }
+    fn close_modal(&mut self) -> Option<Message> {
+        self.modal = None;
+        None
+    }
 
+    fn store_request(&mut self, request_id: RequestId, request: Request) -> Option<Message> {
         match self.request_store.lock() {
             Ok(mut store) => {
                 let request_entry = RequestEntry {
@@ -342,6 +338,18 @@ impl App {
         self.running = false;
         self.abort_server_tx.take().map(|tx| tx.send(()));
         None
+    }
+
+    fn update_screen_and_modal(&mut self, message: Message) -> Option<Message> {
+        let modal_message = if let Some(modal) = self.modal.as_mut() {
+            modal.update(message.clone())
+        } else {
+            None
+        };
+
+        let screen_message = self.screen.update(message);
+
+        modal_message.or(screen_message)
     }
 }
 

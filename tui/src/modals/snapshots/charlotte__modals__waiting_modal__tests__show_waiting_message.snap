@@ -1,5 +1,5 @@
 ---
-source: tui/src/waiting_screen.rs
+source: tui/src/modals/waiting_modal.rs
 expression: terminal.backend()
 ---
 "                                                                                "

@@ -14,7 +14,7 @@ use ratatui::{
 };
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     CopySelectedToClipboard,
     NextTab,

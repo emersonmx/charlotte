@@ -7,6 +7,7 @@ mod app;
 mod cli;
 mod clipboard;
 mod config;
+mod modals;
 mod screens;
 mod theme;
 mod widgets;

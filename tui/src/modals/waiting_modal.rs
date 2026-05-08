@@ -13,21 +13,21 @@ fn centered_area(area: Rect, width: u16, height: u16) -> Rect {
     Rect::new(x, y, width, height)
 }
 
-pub struct WaitingScreen {
+pub struct WaitingModal {
     server_host: String,
     server_port: u16,
 }
 
-impl WaitingScreen {
-    pub fn new(server_host: String, server_port: u16) -> Self {
+impl WaitingModal {
+    pub fn new(server_host: &str, server_port: u16) -> Self {
         Self {
+            server_host: server_host.to_string(),
             server_port,
-            server_host,
         }
     }
 }
 
-impl Screen for WaitingScreen {
+impl Screen for WaitingModal {
     fn draw(&mut self, frame: &mut Frame) {
         let message = format!(
             "Waiting for requests on {}:{} (press 'q' to quit)",
@@ -49,6 +49,13 @@ impl Screen for WaitingScreen {
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         is_quit_key_event(&event)
     }
+
+    fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
+        match message {
+            AppMessage::RequestEntryUpdated(_) => Some(AppMessage::CloseModal),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -64,24 +71,24 @@ mod tests {
     }
 
     #[fixture]
-    fn screen() -> WaitingScreen {
-        WaitingScreen::new("localhost".to_string(), 8888)
+    fn screen() -> WaitingModal {
+        WaitingModal::new("localhost", 8888)
     }
 
     #[rstest]
-    fn create_waiting_screen(screen: WaitingScreen) {
+    fn create_waiting_screen(screen: WaitingModal) {
         assert_eq!(screen.server_host, "localhost");
         assert_eq!(screen.server_port, 8888);
     }
 
     #[rstest]
-    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut screen: WaitingScreen) {
+    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut screen: WaitingModal) {
         terminal.draw(|frame| screen.draw(frame)).unwrap();
         assert_snapshot!(terminal.backend());
     }
 
     #[rstest]
-    fn quit_on_q_key(screen: WaitingScreen) {
+    fn quit_on_q_key(screen: WaitingModal) {
         let quit_event = Event::Key(crossterm::event::KeyEvent {
             code: crossterm::event::KeyCode::Char('q'),
             modifiers: crossterm::event::KeyModifiers::NONE,
