@@ -82,12 +82,23 @@ impl From<&RequestEntry> for RequestEntryRow {
         } else {
             "Pending".to_string()
         };
+        let body = {
+            let request_body_len = entry.request.body.as_bytes().len();
+            let response_body_len = entry
+                .response
+                .as_ref()
+                .map_or(0, |response| response.body.as_bytes().len());
+            format!(
+                "Sent: {} bytes | Received: {} bytes",
+                request_body_len, response_body_len
+            )
+        };
 
         RequestEntryRow {
             request_id: entry.request_id.to_string(),
             method: entry.request.method.to_string(),
             url: entry.request.url.to_string(),
-            body: String::from_utf8_lossy(entry.request.body.as_bytes()).to_string(),
+            body,
             status,
         }
     }
