@@ -103,7 +103,7 @@ impl Widget for Tabs {
     }
 }
 
-#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct KeyValueTableState {
     table_state: TableState,
     scrollbar_state: ScrollbarState,
@@ -127,6 +127,16 @@ impl KeyValueTableState {
     pub fn select_previous(&mut self) {
         self.table_state.select_previous();
         self.scrollbar_state.prev();
+    }
+}
+
+impl Default for KeyValueTableState {
+    fn default() -> Self {
+        let table_state = TableState::default().with_selected(Some(0));
+        Self {
+            table_state,
+            scrollbar_state: ScrollbarState::default(),
+        }
     }
 }
 

@@ -16,7 +16,6 @@ use std::fmt::Display;
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
-    SetInputBuffer(Option<String>),
     CopySelectedToClipboard,
     NextTab,
     PreviousTab,
@@ -152,7 +151,6 @@ impl From<HeaderMap> for TableColumnWidths {
 pub struct HttpClientScreen {
     clipboard: Clipboard,
     request_entry: RequestEntry,
-    input_buffer: Option<String>,
     tab_selected: Tab,
     section_selected: Section,
     request_section_selected: RequestSection,
@@ -213,7 +211,6 @@ impl HttpClientScreen {
         Self {
             clipboard,
             request_entry,
-            input_buffer: None,
             tab_selected: Tab::Request,
             section_selected: Section::default(),
             request_section_selected: RequestSection::default(),
@@ -382,7 +379,7 @@ impl HttpClientScreen {
     }
 
     fn draw_status_bar(&self, frame: &mut Frame, area: Rect) {
-        let text = "Press 'backspace' to go back, 'yy' to copy selected value to clipboard. Use arrow keys or h/j/k/l to navigate.";
+        let text = "Press 'backspace' to go back, 'y' to copy selected value to clipboard. Use arrow keys or h/j/k/l to navigate.";
         let bordered_text = BorderedText::new(text);
         frame.render_widget(bordered_text, area);
     }
@@ -399,11 +396,6 @@ impl HttpClientScreen {
                 Tab::Response => self.response_section_selected.clone().into(),
             },
         };
-        None
-    }
-
-    fn set_input_buffer(&mut self, value: Option<String>) -> Option<AppMessage> {
-        self.input_buffer = value;
         None
     }
 
@@ -426,7 +418,7 @@ impl HttpClientScreen {
             let _ = store.set_text(text);
         }
 
-        Some(Message::SetInputBuffer(None).into())
+        None
     }
 
     fn get_query_param_selected(&self) -> String {
@@ -657,40 +649,31 @@ impl Screen for HttpClientScreen {
         }
 
         if let Event::Key(key_event) = event {
-            let input_buffer = self.input_buffer.as_deref();
-            match input_buffer {
-                Some("y") => {
+            match key_event.code {
+                KeyCode::Left | KeyCode::Char('h') => {
+                    return Some(Message::PreviousTab.into());
+                }
+                KeyCode::Right | KeyCode::Char('l') => {
+                    return Some(Message::NextTab.into());
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    return Some(Message::PreviousRow.into());
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    return Some(Message::NextRow.into());
+                }
+                KeyCode::Char('y') => {
                     return Some(Message::CopySelectedToClipboard.into());
                 }
-                Some(_) => {
-                    return Some(Message::SetInputBuffer(None).into());
+                KeyCode::Char(c @ '1'..='5') => {
+                    if let Some(d @ 1..=5) = c.to_digit(10) {
+                        return Some(Message::SelectSection(d as usize).into());
+                    }
                 }
-                _ => match key_event.code {
-                    KeyCode::Left | KeyCode::Char('h') => {
-                        return Some(Message::PreviousTab.into());
-                    }
-                    KeyCode::Right | KeyCode::Char('l') => {
-                        return Some(Message::NextTab.into());
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        return Some(Message::PreviousRow.into());
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        return Some(Message::NextRow.into());
-                    }
-                    KeyCode::Char('y') => {
-                        return Some(Message::SetInputBuffer(Some('y'.to_string())).into());
-                    }
-                    KeyCode::Char(c @ '1'..='5') => {
-                        if let Some(d @ 1..=5) = c.to_digit(10) {
-                            return Some(Message::SelectSection(d as usize).into());
-                        }
-                    }
-                    KeyCode::Backspace => {
-                        return Some(AppMessage::ShowRequestsScreen);
-                    }
-                    _ => {}
-                },
+                KeyCode::Backspace => {
+                    return Some(AppMessage::ShowRequestsScreen);
+                }
+                _ => {}
             }
         }
 
@@ -704,7 +687,6 @@ impl Screen for HttpClientScreen {
         };
 
         match message {
-            Message::SetInputBuffer(value) => self.set_input_buffer(value),
             Message::CopySelectedToClipboard => self.copy_selected_to_clipboard(),
             Message::PreviousTab => self.select_previous_tab(),
             Message::NextTab => self.select_next_tab(),
