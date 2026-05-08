@@ -32,7 +32,7 @@ impl Screen for WaitingModal {
         let height = y_padding + border_padding;
         let centered_area = centered_area(frame.area(), width, height);
 
-        let bordered_text = BorderedText::new(message).focused(true);
+        let bordered_text = BorderedText::new(message).focused(true).centered();
         frame.render_widget(bordered_text, centered_area);
     }
 

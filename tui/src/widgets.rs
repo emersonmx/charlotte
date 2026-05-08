@@ -1,7 +1,7 @@
 use crate::theme;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Margin, Rect},
+    layout::{Alignment, Constraint, Margin, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{
@@ -14,6 +14,7 @@ use ratatui::{
 pub struct BorderedText {
     title: Option<String>,
     text: String,
+    alignment: Alignment,
     is_focused: bool,
     focus_style: Style,
     scroll: (u16, u16),
@@ -24,6 +25,7 @@ impl BorderedText {
         Self {
             title: None,
             text: text.into(),
+            alignment: Alignment::Left,
             is_focused: false,
             focus_style: theme::styles::highlight_fg(),
             scroll: (0, 0),
@@ -49,6 +51,11 @@ impl BorderedText {
         self.scroll = scroll;
         self
     }
+
+    pub fn centered(mut self) -> Self {
+        self.alignment = Alignment::Center;
+        self
+    }
 }
 
 impl Widget for BorderedText {
@@ -61,7 +68,10 @@ impl Widget for BorderedText {
             block = block.style(self.focus_style);
         }
 
-        let paragraph = Paragraph::new(self.text).scroll(self.scroll).block(block);
+        let paragraph = Paragraph::new(self.text)
+            .scroll(self.scroll)
+            .block(block)
+            .alignment(self.alignment);
         paragraph.render(area, buf);
     }
 }
