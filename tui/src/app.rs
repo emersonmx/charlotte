@@ -62,10 +62,6 @@ pub struct RequestEntry {
     pub response: Option<Response>,
 }
 
-pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
-pub type Clipboard = Arc<Mutex<crate::clipboard::Clipboard>>;
-pub type SharedRequestsTableColumnWidths = Arc<Mutex<RequestsTableColumnWidths>>;
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RequestEntryRow {
     pub request_id: String,
@@ -170,6 +166,10 @@ impl Default for RequestsTableColumnWidths {
         widths
     }
 }
+
+pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
+pub type Clipboard = Arc<Mutex<crate::clipboard::Clipboard>>;
+pub type SharedRequestsTableColumnWidths = Arc<Mutex<RequestsTableColumnWidths>>;
 
 pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), ServerError>>>,
