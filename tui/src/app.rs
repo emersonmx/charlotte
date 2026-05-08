@@ -2,7 +2,10 @@ use crate::{
     clipboard::Clipboard,
     config::Config,
     modals::WaitingModal,
-    screens::{HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage},
+    screens::{
+        HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
+        RequestsScreenState,
+    },
 };
 use crossterm::event::{Event, EventStream};
 use proxy::{
@@ -28,10 +31,11 @@ pub enum Message {
     RequestEntryUpdated(Box<RequestEntry>),
     // Global
     ShowRequestsScreen,
-    ShowHttpClientScreen(Box<RequestEntry>),
+    ShowHttpClientScreen,
     CloseModal,
     StoreRequest(Box<(RequestId, Request)>),
     StoreResponse(Box<(RequestId, Response)>),
+    StoreRequestsScreenState(Box<RequestsScreenState>),
     CopyToClipboard(String),
     Quit,
     // Screen-specific
@@ -73,6 +77,7 @@ pub struct App {
     screen: BoxedScreen,
     modal: Option<BoxedScreen>,
     request_store: RequestStore,
+    requests_screen_state: RequestsScreenState,
     clipboard: Clipboard,
     running: bool,
     exit_error: Option<anyhow::Error>,
@@ -86,7 +91,11 @@ impl App {
         let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
         let clipboard = Clipboard::new()?;
 
-        let screen = Box::new(RequestsScreen::new(request_store.clone()));
+        let requests_screen_state = RequestsScreenState::default();
+        let screen = Box::new(RequestsScreen::new(
+            request_store.clone(),
+            requests_screen_state.clone(),
+        ));
 
         Ok(Self {
             abort_app_rx: None,
@@ -96,6 +105,7 @@ impl App {
             screen,
             modal: Some(modal),
             request_store,
+            requests_screen_state,
             clipboard,
             running: true,
             exit_error: None,
@@ -103,7 +113,10 @@ impl App {
     }
 
     fn make_requests_screen(&self) -> RequestsScreen {
-        RequestsScreen::new(self.request_store.clone())
+        RequestsScreen::new(
+            self.request_store.clone(),
+            self.requests_screen_state.clone(),
+        )
     }
 
     fn make_http_client_screen(&self, request_entry: RequestEntry) -> HttpClientScreen {
@@ -264,9 +277,7 @@ impl App {
     fn update(&mut self, message: Message) -> Option<Message> {
         match message {
             Message::ShowRequestsScreen => self.show_requests_screen(),
-            Message::ShowHttpClientScreen(request_entry) => {
-                self.show_http_client_screen(*request_entry)
-            }
+            Message::ShowHttpClientScreen => self.show_http_client_screen(),
             Message::CloseModal => self.close_modal(),
             Message::StoreRequest(message) => {
                 let (request_id, request) = *message;
@@ -275,6 +286,9 @@ impl App {
             Message::StoreResponse(message) => {
                 let (request_id, response) = *message;
                 self.store_response(request_id, response)
+            }
+            Message::StoreRequestsScreenState(message) => {
+                self.store_requests_screen_state(*message)
             }
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
@@ -287,7 +301,14 @@ impl App {
         Some(RequestsScreenMessage::UpdateTableState.into())
     }
 
-    fn show_http_client_screen(&mut self, request_entry: RequestEntry) -> Option<Message> {
+    fn show_http_client_screen(&mut self) -> Option<Message> {
+        let selected = self.requests_screen_state.selected_request_entry?;
+
+        let request_entry = match self.request_store.lock() {
+            Ok(store) => store.values().nth(selected)?.clone(),
+            Err(_) => return Some(Message::Quit),
+        };
+
         let screen = self.make_http_client_screen(request_entry);
         self.screen = Box::new(screen);
         None
@@ -326,6 +347,11 @@ impl App {
             }
             Err(_) => Some(Message::Quit),
         }
+    }
+
+    fn store_requests_screen_state(&mut self, state: RequestsScreenState) -> Option<Message> {
+        self.requests_screen_state = state;
+        None
     }
 
     fn copy_to_clipboard(&mut self, content: String) -> Option<Message> {

@@ -133,52 +133,81 @@ impl Default for RequestsTableColumnWidths {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RequestsScreenState {
+    pub selected_request_entry: Option<usize>,
+    pub table_column_widths: RequestsTableColumnWidths,
+    pub table_state: TableState,
+    pub table_scroll_state: ScrollbarState,
+}
+
+impl RequestsScreenState {
+    fn update_table_column_widths(&mut self, request_entry: &RequestEntry) {
+        let row = RequestEntryRow::from(request_entry);
+        self.table_column_widths.update(row);
+    }
+
+    fn update_table_scroll(&mut self, requests_length: usize) {
+        if self.table_state.selected().is_none() {
+            self.table_state = self.table_state.with_selected(Some(0));
+            self.selected_request_entry = self.table_state.selected();
+        }
+        self.table_scroll_state = self.table_scroll_state.content_length(requests_length);
+    }
+
+    fn select_previous_request_entry(&mut self) {
+        self.table_state.select_previous();
+        self.table_scroll_state.prev();
+        self.selected_request_entry = self.table_state.selected();
+    }
+
+    fn select_next_request_entry(&mut self) {
+        self.table_state.select_next();
+        self.table_scroll_state.next();
+        self.selected_request_entry = self.table_state.selected();
+    }
+}
+
 pub struct RequestsScreen {
     request_store: RequestStore,
-    table_column_widths: RequestsTableColumnWidths,
-    table_state: TableState,
-    table_scroll_state: ScrollbarState,
+    state: RequestsScreenState,
 }
 
 impl RequestsScreen {
-    pub fn new(request_store: RequestStore) -> Self {
-        let table_column_widths = RequestsTableColumnWidths::default();
+    pub fn new(request_store: RequestStore, state: RequestsScreenState) -> Self {
         Self {
             request_store,
-            table_column_widths,
-            table_state: TableState::default(),
-            table_scroll_state: ScrollbarState::default(),
+            state,
         }
     }
 }
 
 impl RequestsScreen {
     fn request_entry_updated(&mut self, request_entry: Box<RequestEntry>) -> Option<AppMessage> {
-        self.table_column_widths
-            .update(request_entry.as_ref().into());
+        self.state
+            .update_table_column_widths(request_entry.as_ref());
         Some(Message::UpdateTableState.into())
     }
 
     fn update_table_state(&mut self) -> Option<AppMessage> {
-        if self.table_state.selected().is_none() {
-            self.table_state.select_first();
-        }
-        self.table_scroll_state = self
-            .table_scroll_state
-            .content_length(self.requests_length());
-        None
+        self.state.update_table_scroll(self.requests_length());
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
     }
 
     fn select_previous_row(&mut self) -> Option<AppMessage> {
-        self.table_state.select_previous();
-        self.table_scroll_state.prev();
-        None
+        self.state.select_previous_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
     }
 
     fn select_next_row(&mut self) -> Option<AppMessage> {
-        self.table_state.select_next();
-        self.table_scroll_state.next();
-        None
+        self.state.select_next_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
     }
 
     fn requests_length(&self) -> usize {
@@ -197,7 +226,7 @@ impl Screen for RequestsScreen {
             Constraint::Length(3),
         ]);
         let [header_layout, rows_layout, status_area] = frame.area().layout(&layout);
-        let table_widths = &self.table_column_widths;
+        let table_widths = &self.state.table_column_widths;
 
         let header = RequestEntryRow {
             request_id: RequestsTableColumnWidths::TABLE_COLUMN_REQ_ID.to_string(),
@@ -230,7 +259,7 @@ impl Screen for RequestsScreen {
             .block(Block::bordered().borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT))
             .widths(table_widths.to_table_widths())
             .row_highlight_style(theme::styles::highlight());
-        frame.render_stateful_widget(table, rows_layout, &mut self.table_state);
+        frame.render_stateful_widget(table, rows_layout, &mut self.state.table_state);
 
         let area = Rect {
             height: rows_layout.height - 1,
@@ -241,7 +270,7 @@ impl Screen for RequestsScreen {
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .style(theme::styles::reset()),
             area,
-            &mut self.table_scroll_state,
+            &mut self.state.table_scroll_state,
         );
 
         let text = "Arrow keys or j/k to navigate, Enter to view details. q to quit.";
@@ -259,10 +288,7 @@ impl Screen for RequestsScreen {
                 KeyCode::Up | KeyCode::Char('k') => return Some(Message::SelectPreviousRow.into()),
                 KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
                 KeyCode::Enter => {
-                    let selected = self.table_state.selected()?;
-                    let store = self.request_store.lock().ok()?;
-                    let request_entry = store.values().nth(selected).cloned()?;
-                    return Some(AppMessage::ShowHttpClientScreen(Box::new(request_entry)));
+                    return Some(AppMessage::ShowHttpClientScreen);
                 }
                 _ => {}
             }
