@@ -5,7 +5,7 @@ members = ["proxy", "tui"]
 [workspace.dependencies]
 anyhow = "1"
 insta = { version = "1.47", features = ["yaml"] }
-rstest = "0.26.1"
+rstest = "0.26"
 thiserror = "2"
 tokio = { version = "1.48", features = ["full"] }
 tokio-stream = "0.1"
