@@ -384,6 +384,15 @@ impl HttpClientScreen {
         frame.render_widget(bordered_text, area);
     }
 
+    fn request_entry_updated(&mut self, request_entry: RequestEntry) -> Option<AppMessage> {
+        if self.request_entry.request_id != request_entry.request_id {
+            return None;
+        }
+
+        *self = Self::new(request_entry);
+        None
+    }
+
     fn copy_selected_to_clipboard(&mut self) -> Option<AppMessage> {
         let request_entry = &self.request_entry;
 
@@ -701,6 +710,9 @@ impl Screen for HttpClientScreen {
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
         let message = match message {
             AppMessage::HttpClientScreen(message) => message,
+            AppMessage::RequestEntryUpdated(request_entry) => {
+                return self.request_entry_updated(*request_entry);
+            }
             _ => return None,
         };
 
