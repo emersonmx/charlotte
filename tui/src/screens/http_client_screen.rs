@@ -122,7 +122,7 @@ impl TableColumnWidths {
     }
 
     fn to_table_widths(&self) -> [Constraint; 2] {
-        [Constraint::Length(self.key), Constraint::Min(self.value)]
+        [Constraint::Length(self.key), Constraint::Min(0)]
     }
 }
 
