@@ -3,6 +3,7 @@ use crate::{
     widgets::BorderedText,
 };
 use crossterm::event::Event;
+use formatter::wrap_text;
 use ratatui::{Frame, layout::Constraint};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,17 +29,16 @@ impl Screen for WaitingModal {
             "Waiting for requests on {}:{} (press 'q' to quit)",
             self.server_host, self.server_port
         );
-        let message = textwrap::wrap(&message, line_length);
+        let message = wrap_text(&message, line_length);
+        let lines = message.lines().count();
         let message_width = line_length as u16 + 2;
-        let message_height = message.len() as u16 + 2;
+        let message_height = lines as u16 + 2;
         let area = area.centered(
             Constraint::Max(message_width),
             Constraint::Max(message_height),
         );
 
-        let bordered_text = BorderedText::new(message.join("\n"))
-            .focused(true)
-            .centered();
+        let bordered_text = BorderedText::new(message).focused(true).centered();
         frame.render_widget(bordered_text, area);
     }
 

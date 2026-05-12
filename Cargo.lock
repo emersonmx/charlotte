@@ -280,7 +280,6 @@ dependencies = [
  "ratatui",
  "ratatui-textarea",
  "rstest",
- "textwrap",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
@@ -718,6 +717,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "textwrap",
  "thiserror 2.0.18",
 ]
 
