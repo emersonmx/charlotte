@@ -275,6 +275,7 @@ impl Request {
         headers.remove(hyper::header::CONNECTION);
         headers.remove("proxy-connection");
         headers.remove("keep-alive");
+        headers.remove(hyper::header::ACCEPT_ENCODING);
         headers.remove(hyper::header::TRANSFER_ENCODING);
     }
 
