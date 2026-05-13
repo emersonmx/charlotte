@@ -269,7 +269,7 @@ impl HttpClientScreen {
         let tab_line = Tabs::default()
             .titles(vec![
                 format!(" {} ", Tab::Request),
-                format!(" {} ({})", Tab::Response, status),
+                format!(" {} ({}) ", Tab::Response, status),
             ])
             .with_spacer(symbols::line::HORIZONTAL)
             .select(match self.tab_selected {
