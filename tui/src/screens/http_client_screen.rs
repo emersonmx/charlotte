@@ -195,14 +195,12 @@ impl HttpClientScreen {
         };
         let request_body_state = {
             let body_string = String::from_utf8_lossy(request_entry.request.body.as_bytes());
-            let body_string = formatter::format_code(&body_string);
             let lines = body_string.lines().count();
             TextAreaState::new(lines)
         };
         let response_body_state = match &request_entry.response {
             Some(response) => {
                 let body_string = String::from_utf8_lossy(response.body.as_bytes());
-                let body_string = formatter::format_code(&body_string);
                 let lines = body_string.lines().count();
                 TextAreaState::new(lines)
             }
@@ -365,7 +363,6 @@ impl HttpClientScreen {
             body.len()
         ));
         let body_string = String::from_utf8_lossy(body);
-        let body_string = formatter::format_code(&body_string);
         let mut block = Block::bordered().title(title);
         if self.section_selected == Section::Body {
             block = block.style(theme::styles::highlight_fg());
