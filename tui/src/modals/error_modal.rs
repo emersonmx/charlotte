@@ -7,7 +7,7 @@ use crossterm::event::{Event, KeyCode};
 use ratatui::{
     Frame,
     layout::{Constraint, Margin},
-    widgets::{Scrollbar, ScrollbarState},
+    widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 #[allow(clippy::enum_variant_names)]
@@ -108,7 +108,7 @@ impl Screen for ErrorModal {
         frame.render_widget(bordered_text, area);
 
         let scrollbar = Scrollbar::default()
-            .orientation(ratatui::widgets::ScrollbarOrientation::VerticalRight)
+            .orientation(ScrollbarOrientation::VerticalRight)
             .style(theme::styles::error());
         frame.render_stateful_widget(
             scrollbar,
@@ -120,7 +120,7 @@ impl Screen for ErrorModal {
         );
 
         let scrollbar = Scrollbar::default()
-            .orientation(ratatui::widgets::ScrollbarOrientation::HorizontalBottom)
+            .orientation(ScrollbarOrientation::HorizontalBottom)
             .style(theme::styles::error());
         frame.render_stateful_widget(
             scrollbar,

@@ -22,7 +22,7 @@ pub fn generate_certificate(key_pair: &KeyPair) -> Result<Certificate, Error> {
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
     ca_params
         .distinguished_name
-        .push(DnType::CommonName, "Charlotte Proxy CA");
+        .push(DnType::CommonName, "Charlene Proxy CA");
     ca_params.not_before = SystemTime::now().into();
     ca_params.not_after =
         (SystemTime::now() + std::time::Duration::from_secs(365 * 24 * 60 * 60)).into();

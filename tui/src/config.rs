@@ -16,8 +16,8 @@ pub struct Config {
 }
 
 impl Config {
-    const DEFAULT_DIR_ENV: &str = "CHARLOTTE_CONFIG_DIR";
-    const DEFAULT_DIR: &str = ".config/charlotte";
+    const DEFAULT_DIR_ENV: &str = "CHARLENE_CONFIG_DIR";
+    const DEFAULT_DIR: &str = ".config/charlene";
     const CERTS_DIR: &str = "certs";
 
     pub fn new(server_host: String, server_port: u16) -> Result<Self, Error> {

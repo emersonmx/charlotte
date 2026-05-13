@@ -1,6 +1,6 @@
-# Charlotte
+# Charlene
 
-Charlotte is a modern, interactive HTTP/HTTPS proxy and request inspector,
+Charlene is a modern, interactive HTTP/HTTPS proxy and request inspector,
 featuring a TUI (Terminal User Interface) for real-time monitoring of HTTP
 traffic. It is designed for developers and testers who need to inspect, debug,
 or analyze HTTP(S) requests and responses between clients and servers.
@@ -26,8 +26,8 @@ or analyze HTTP(S) requests and responses between clients and servers.
 Clone the repository:
 
 ```sh
-git clone https://github.com/emersonmx/charlotte.git
-cd charlotte
+git clone https://github.com/emersonmx/charlene.git
+cd charlene
 ```
 
 Install development tools and hooks:
@@ -60,9 +60,9 @@ Configure your browser or HTTP client to use the proxy address.
 
 ### Certificates
 
-When you start Charlotte for the first time, a custom Certificate Authority (CA)
+When you start Charlene for the first time, a custom Certificate Authority (CA)
 is automatically generated in your system's default configuration directory, for
-example: `~/.config/charlotte/certs/ca.{crt,pem,key}`.
+example: `~/.config/charlene/certs/ca.{crt,pem,key}`.
 
 To avoid HTTPS security warnings in browsers or clients, you need to add the
 `ca.crt` (or `ca.pem`) file as a trusted CA in your operating system or browser.
