@@ -10,7 +10,7 @@ use crate::{
 use crossterm::event::{Event, EventStream};
 use proxy::{
     certs::{CertificateStore, generate_certificate, generate_key_pair},
-    http::{Request, Response},
+    http::{Body, Request, Response},
     server::{Error as ServerError, Message as ProxyMessage, RequestId, Server as ProxyServer},
 };
 use ratatui::{DefaultTerminal, Frame};
@@ -314,9 +314,11 @@ impl App {
         let (request_id, request) = message;
         match self.request_store.lock() {
             Ok(mut store) => {
+                let formatted_body = formatter::format_code(&request.body.to_string());
+                let body = Body::new(formatted_body.into_bytes());
                 let request_entry = RequestEntry {
                     request_id,
-                    request,
+                    request: Request { body, ..request },
                     response: None,
                 };
                 store.insert(request_id, request_entry.clone());
@@ -332,6 +334,9 @@ impl App {
         match self.request_store.lock() {
             Ok(mut store) => {
                 if let Some(request_entry) = store.get_mut(&request_id) {
+                    let formatted_body = formatter::format_code(&response.body.to_string());
+                    let body = Body::new(formatted_body.into_bytes());
+                    let response = Response { body, ..response };
                     request_entry.response = Some(response);
 
                     return Some(Message::RequestEntryUpdated(request_entry.clone().into()));
