@@ -301,8 +301,7 @@ impl StatefulWidget for TextArea<'_> {
     type State = TextAreaState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let content = formatter::wrap_text(&self.content, area.width as usize);
-        let message_height = content.lines().count() + 1;
+        let message_height = self.content.lines().count() + 1;
         state.scrollbar_state = state
             .scrollbar_state
             .content_length(message_height.saturating_sub(area.height as usize) + 2);
