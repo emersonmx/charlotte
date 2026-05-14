@@ -191,9 +191,10 @@ mod tests {
     }
 
     #[rstest]
-    fn draw_error_modal(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
-        terminal.draw(|frame| modal.draw(frame)).unwrap();
-        assert_snapshot!(terminal.backend());
+    fn create_modal(modal: ErrorModal) {
+        assert!(modal.content.contains("This is a very long error message"));
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 0);
+        assert_eq!(modal.scrollbar_horizontal_state.get_position(), 0);
     }
 
     #[rstest]
@@ -244,5 +245,11 @@ mod tests {
             modal.scrollbar_horizontal_state.get_position(),
             ErrorModal::X_SCROLL_STEP
         );
+    }
+
+    #[rstest]
+    fn draw_modal(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        assert_snapshot!(terminal.backend());
     }
 }

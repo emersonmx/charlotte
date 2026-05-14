@@ -77,15 +77,9 @@ mod tests {
     }
 
     #[rstest]
-    fn create_waiting_screen(screen: WaitingModal) {
+    fn create_modal(screen: WaitingModal) {
         assert_eq!(screen.server_host, "localhost");
         assert_eq!(screen.server_port, 8888);
-    }
-
-    #[rstest]
-    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut screen: WaitingModal) {
-        terminal.draw(|frame| screen.draw(frame)).unwrap();
-        assert_snapshot!(terminal.backend());
     }
 
     #[rstest]
@@ -97,5 +91,11 @@ mod tests {
 
         let message = screen.handle_event(quit_event);
         assert_eq!(message, Some(AppMessage::Quit));
+    }
+
+    #[rstest]
+    fn draw_modal(mut terminal: Terminal<TestBackend>, mut screen: WaitingModal) {
+        terminal.draw(|frame| screen.draw(frame)).unwrap();
+        assert_snapshot!(terminal.backend());
     }
 }
