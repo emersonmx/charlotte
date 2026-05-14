@@ -9,3 +9,15 @@ pub struct Cli {
     #[arg(long, default_value_t = 8888)]
     pub port: u16,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert();
+    }
+}
