@@ -1,6 +1,6 @@
 use crate::{
     app::{Message as AppMessage, Screen},
-    inputmap::is_quit_pressed,
+    inputmap::{Input, map_event_to_input},
     widgets::BorderedText,
 };
 use crossterm::event::Event;
@@ -44,10 +44,9 @@ impl Screen for WaitingModal {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if is_quit_pressed(&event) {
-            Some(AppMessage::Quit)
-        } else {
-            None
+        match map_event_to_input(&event) {
+            Some(Input::Quit) => Some(AppMessage::Quit),
+            _ => None,
         }
     }
 

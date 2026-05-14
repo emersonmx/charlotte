@@ -1,6 +1,64 @@
 use crossterm::event::{Event, KeyCode, KeyEvent};
 
-pub fn is_quit_pressed(event: &Event) -> bool {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Input {
+    Quit,
+    Accept,
+    Back,
+    Copy,
+    Section(usize),
+    Up,
+    Down,
+    Left,
+    Right,
+    PreviousTab,
+    NextTab,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    AnyKey,
+}
+
+pub fn map_event_to_input(event: &Event) -> Option<Input> {
+    if is_quit_pressed(event) {
+        Some(Input::Quit)
+    } else if is_accept_pressed(event) {
+        Some(Input::Accept)
+    } else if is_back_pressed(event) {
+        Some(Input::Back)
+    } else if is_copy_pressed(event) {
+        Some(Input::Copy)
+    } else if let Some(section_number) = get_section_number(event) {
+        Some(Input::Section(section_number))
+    } else if is_up_pressed(event) {
+        Some(Input::Up)
+    } else if is_down_pressed(event) {
+        Some(Input::Down)
+    } else if is_left_pressed(event) {
+        Some(Input::Left)
+    } else if is_right_pressed(event) {
+        Some(Input::Right)
+    } else if is_previous_tab_pressed(event) {
+        Some(Input::PreviousTab)
+    } else if is_next_tab_pressed(event) {
+        Some(Input::NextTab)
+    } else if is_page_up_pressed(event) {
+        Some(Input::PageUp)
+    } else if is_page_down_pressed(event) {
+        Some(Input::PageDown)
+    } else if is_home_pressed(event) {
+        Some(Input::Home)
+    } else if is_end_pressed(event) {
+        Some(Input::End)
+    } else if is_any_key_pressed(event) {
+        Some(Input::AnyKey)
+    } else {
+        None
+    }
+}
+
+fn is_quit_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Char('q'))
     } else {
@@ -8,7 +66,7 @@ pub fn is_quit_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_accept_pressed(event: &Event) -> bool {
+fn is_accept_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Enter)
     } else {
@@ -16,7 +74,7 @@ pub fn is_accept_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_back_pressed(event: &Event) -> bool {
+fn is_back_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Backspace | KeyCode::Esc)
     } else {
@@ -24,7 +82,7 @@ pub fn is_back_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_copy_pressed(event: &Event) -> bool {
+fn is_copy_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Char('y'))
     } else {
@@ -32,7 +90,7 @@ pub fn is_copy_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn get_section_number(event: &Event) -> Option<usize> {
+fn get_section_number(event: &Event) -> Option<usize> {
     match event {
         Event::Key(KeyEvent { code, .. }) => {
             if let KeyCode::Char(c) = code {
@@ -45,7 +103,7 @@ pub fn get_section_number(event: &Event) -> Option<usize> {
     }
 }
 
-pub fn is_up_pressed(event: &Event) -> bool {
+fn is_up_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Up | KeyCode::Char('k'))
     } else {
@@ -53,7 +111,7 @@ pub fn is_up_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_down_pressed(event: &Event) -> bool {
+fn is_down_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Down | KeyCode::Char('j'))
     } else {
@@ -61,7 +119,7 @@ pub fn is_down_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_left_pressed(event: &Event) -> bool {
+fn is_left_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Left | KeyCode::Char('h'))
     } else {
@@ -69,7 +127,7 @@ pub fn is_left_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_right_pressed(event: &Event) -> bool {
+fn is_right_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Right | KeyCode::Char('l'))
     } else {
@@ -77,7 +135,7 @@ pub fn is_right_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_previous_tab_pressed(event: &Event) -> bool {
+fn is_previous_tab_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::BackTab | KeyCode::Char('['))
     } else {
@@ -85,7 +143,7 @@ pub fn is_previous_tab_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_next_tab_pressed(event: &Event) -> bool {
+fn is_next_tab_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Tab | KeyCode::Char(']'))
     } else {
@@ -93,7 +151,7 @@ pub fn is_next_tab_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_page_up_pressed(event: &Event) -> bool {
+fn is_page_up_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::PageUp)
     } else {
@@ -101,7 +159,7 @@ pub fn is_page_up_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_page_down_pressed(event: &Event) -> bool {
+fn is_page_down_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::PageDown)
     } else {
@@ -109,7 +167,7 @@ pub fn is_page_down_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_home_pressed(event: &Event) -> bool {
+fn is_home_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::Home)
     } else {
@@ -117,7 +175,7 @@ pub fn is_home_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_end_pressed(event: &Event) -> bool {
+fn is_end_pressed(event: &Event) -> bool {
     if let Event::Key(KeyEvent { code, .. }) = event {
         matches!(code, KeyCode::End)
     } else {
@@ -125,7 +183,7 @@ pub fn is_end_pressed(event: &Event) -> bool {
     }
 }
 
-pub fn is_any_key_pressed(event: &Event) -> bool {
+fn is_any_key_pressed(event: &Event) -> bool {
     matches!(event, Event::Key(_))
 }
 
@@ -136,6 +194,53 @@ mod tests {
         Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     };
     use rstest::rstest;
+
+    #[rstest]
+    fn test_map_event_to_input() {
+        let quit_event = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        let accept_event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        let back_event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        let copy_event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        let section_event = Event::Key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+        let up_event = Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        let down_event = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        let left_event = Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        let right_event = Event::Key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        let prev_tab_event = Event::Key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
+        let next_tab_event = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+        let page_up_event = Event::Key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE));
+        let page_down_event = Event::Key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+        let home_event = Event::Key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+        let end_event = Event::Key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+        let any_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        let non_key_event = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+
+        assert_eq!(map_event_to_input(&quit_event), Some(Input::Quit));
+        assert_eq!(map_event_to_input(&accept_event), Some(Input::Accept));
+        assert_eq!(map_event_to_input(&back_event), Some(Input::Back));
+        assert_eq!(map_event_to_input(&copy_event), Some(Input::Copy));
+        assert_eq!(map_event_to_input(&section_event), Some(Input::Section(3)));
+        assert_eq!(map_event_to_input(&up_event), Some(Input::Up));
+        assert_eq!(map_event_to_input(&down_event), Some(Input::Down));
+        assert_eq!(map_event_to_input(&left_event), Some(Input::Left));
+        assert_eq!(map_event_to_input(&right_event), Some(Input::Right));
+        assert_eq!(
+            map_event_to_input(&prev_tab_event),
+            Some(Input::PreviousTab)
+        );
+        assert_eq!(map_event_to_input(&next_tab_event), Some(Input::NextTab));
+        assert_eq!(map_event_to_input(&page_up_event), Some(Input::PageUp));
+        assert_eq!(map_event_to_input(&page_down_event), Some(Input::PageDown));
+        assert_eq!(map_event_to_input(&home_event), Some(Input::Home));
+        assert_eq!(map_event_to_input(&end_event), Some(Input::End));
+        assert_eq!(map_event_to_input(&any_key_event), Some(Input::AnyKey));
+        assert_eq!(map_event_to_input(&non_key_event), None);
+    }
 
     #[rstest]
     fn test_is_quit_pressed() {

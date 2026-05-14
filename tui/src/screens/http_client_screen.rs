@@ -1,9 +1,6 @@
 use crate::{
     app::{Message as AppMessage, RequestEntry, Screen},
-    inputmap::{
-        get_section_number, is_back_pressed, is_copy_pressed, is_down_pressed, is_next_tab_pressed,
-        is_previous_tab_pressed, is_quit_pressed, is_up_pressed,
-    },
+    inputmap::{Input, map_event_to_input},
     theme,
     widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
@@ -675,39 +672,17 @@ impl Screen for HttpClientScreen {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if is_quit_pressed(&event) {
-            return Some(AppMessage::Quit);
+        match map_event_to_input(&event) {
+            Some(Input::Quit) => Some(AppMessage::Quit),
+            Some(Input::PreviousTab) => Some(Message::PreviousTab.into()),
+            Some(Input::NextTab) => Some(Message::NextTab.into()),
+            Some(Input::Up) => Some(Message::PreviousRow.into()),
+            Some(Input::Down) => Some(Message::NextRow.into()),
+            Some(Input::Copy) => Some(Message::CopySelectedToClipboard.into()),
+            Some(Input::Section(section @ 1..=5)) => Some(Message::SelectSection(section).into()),
+            Some(Input::Back) => Some(AppMessage::ShowRequestsScreen),
+            _ => None,
         }
-
-        if is_previous_tab_pressed(&event) {
-            return Some(Message::PreviousTab.into());
-        }
-
-        if is_next_tab_pressed(&event) {
-            return Some(Message::NextTab.into());
-        }
-
-        if is_up_pressed(&event) {
-            return Some(Message::PreviousRow.into());
-        }
-
-        if is_down_pressed(&event) {
-            return Some(Message::NextRow.into());
-        }
-
-        if is_copy_pressed(&event) {
-            return Some(Message::CopySelectedToClipboard.into());
-        }
-
-        if let Some(section @ 1..=5) = get_section_number(&event) {
-            return Some(Message::SelectSection(section).into());
-        }
-
-        if is_back_pressed(&event) {
-            return Some(AppMessage::ShowRequestsScreen);
-        }
-
-        None
     }
 
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {

@@ -1,6 +1,6 @@
 use crate::{
     app::{Message as AppMessage, RequestEntry, RequestStore, Screen},
-    inputmap::{is_accept_pressed, is_down_pressed, is_quit_pressed, is_up_pressed},
+    inputmap::{Input, map_event_to_input},
     theme,
     widgets::BorderedText,
 };
@@ -280,23 +280,13 @@ impl Screen for RequestsScreen {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if is_quit_pressed(&event) {
-            return Some(AppMessage::Quit);
+        match map_event_to_input(&event) {
+            Some(Input::Quit) => Some(AppMessage::Quit),
+            Some(Input::Up) => Some(Message::SelectPreviousRow.into()),
+            Some(Input::Down) => Some(Message::SelectNextRow.into()),
+            Some(Input::Accept) => Some(AppMessage::ShowHttpClientScreen),
+            _ => None,
         }
-
-        if is_up_pressed(&event) {
-            return Some(Message::SelectPreviousRow.into());
-        }
-
-        if is_down_pressed(&event) {
-            return Some(Message::SelectNextRow.into());
-        }
-
-        if is_accept_pressed(&event) {
-            return Some(AppMessage::ShowHttpClientScreen);
-        }
-
-        None
     }
 
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {

@@ -1,9 +1,6 @@
 use crate::{
     app::{Message as AppMessage, Screen},
-    inputmap::{
-        is_any_key_pressed, is_down_pressed, is_left_pressed, is_quit_pressed, is_right_pressed,
-        is_up_pressed,
-    },
+    inputmap::{Input, map_event_to_input},
     theme,
     widgets::BorderedText,
 };
@@ -137,31 +134,15 @@ impl Screen for ErrorModal {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if is_quit_pressed(&event) {
-            return Some(AppMessage::Quit);
+        match map_event_to_input(&event) {
+            Some(Input::Quit) => return Some(AppMessage::Quit),
+            Some(Input::Up) => return Some(Message::ScrollUp.into()),
+            Some(Input::Down) => return Some(Message::ScrollDown.into()),
+            Some(Input::Left) => return Some(Message::ScrollLeft.into()),
+            Some(Input::Right) => return Some(Message::ScrollRight.into()),
+            Some(Input::AnyKey) => return Some(AppMessage::CloseModal),
+            _ => None,
         }
-
-        if is_up_pressed(&event) {
-            return Some(Message::ScrollUp.into());
-        }
-
-        if is_down_pressed(&event) {
-            return Some(Message::ScrollDown.into());
-        }
-
-        if is_right_pressed(&event) {
-            return Some(Message::ScrollRight.into());
-        }
-
-        if is_left_pressed(&event) {
-            return Some(Message::ScrollLeft.into());
-        }
-
-        if is_any_key_pressed(&event) {
-            return Some(AppMessage::CloseModal);
-        }
-
-        None
     }
 
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
