@@ -135,11 +135,11 @@ impl Screen for ErrorModal {
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         match map_event_to_input(&event) {
-            Some(Input::Quit) => Some(AppMessage::Quit),
             Some(Input::Up) => Some(Message::ScrollUp.into()),
             Some(Input::Down) => Some(Message::ScrollDown.into()),
             Some(Input::Left) => Some(Message::ScrollLeft.into()),
             Some(Input::Right) => Some(Message::ScrollRight.into()),
+            Some(Input::Quit) => Some(AppMessage::Quit),
             Some(Input::AnyKey) => Some(AppMessage::CloseModal),
             _ => None,
         }
