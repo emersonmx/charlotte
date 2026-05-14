@@ -1,9 +1,10 @@
 use crate::{
-    app::{Message as AppMessage, RequestEntry, RequestStore, Screen, is_quit_key_event},
+    app::{Message as AppMessage, RequestEntry, RequestStore, Screen},
+    inputmap::{is_accept_pressed, is_down_pressed, is_quit_pressed, is_up_pressed},
     theme,
     widgets::BorderedText,
 };
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::Event;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction::Vertical, Layout, Rect},
@@ -279,19 +280,20 @@ impl Screen for RequestsScreen {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if let Some(message) = is_quit_key_event(&event) {
-            return Some(message);
+        if is_quit_pressed(&event) {
+            return Some(AppMessage::Quit);
         }
 
-        if let Event::Key(key_event) = event {
-            match key_event.code {
-                KeyCode::Up | KeyCode::Char('k') => return Some(Message::SelectPreviousRow.into()),
-                KeyCode::Down | KeyCode::Char('j') => return Some(Message::SelectNextRow.into()),
-                KeyCode::Enter => {
-                    return Some(AppMessage::ShowHttpClientScreen);
-                }
-                _ => {}
-            }
+        if is_up_pressed(&event) {
+            return Some(Message::SelectPreviousRow.into());
+        }
+
+        if is_down_pressed(&event) {
+            return Some(Message::SelectNextRow.into());
+        }
+
+        if is_accept_pressed(&event) {
+            return Some(AppMessage::ShowHttpClientScreen);
         }
 
         None

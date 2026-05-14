@@ -1,9 +1,13 @@
 use crate::{
-    app::{Message as AppMessage, Screen, is_quit_key_event},
+    app::{Message as AppMessage, Screen},
+    inputmap::{
+        is_any_key_pressed, is_down_pressed, is_left_pressed, is_quit_pressed, is_right_pressed,
+        is_up_pressed,
+    },
     theme,
     widgets::BorderedText,
 };
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::Event;
 use ratatui::{
     Frame,
     layout::{Constraint, Margin},
@@ -133,18 +137,28 @@ impl Screen for ErrorModal {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if let Some(AppMessage::Quit) = is_quit_key_event(&event) {
+        if is_quit_pressed(&event) {
             return Some(AppMessage::Quit);
         }
 
-        if let Event::Key(key_event) = event {
-            match key_event.code {
-                KeyCode::Up | KeyCode::Char('k') => return Some(Message::ScrollUp.into()),
-                KeyCode::Down | KeyCode::Char('j') => return Some(Message::ScrollDown.into()),
-                KeyCode::Left | KeyCode::Char('h') => return Some(Message::ScrollLeft.into()),
-                KeyCode::Right | KeyCode::Char('l') => return Some(Message::ScrollRight.into()),
-                _ => return Some(AppMessage::CloseModal),
-            }
+        if is_up_pressed(&event) {
+            return Some(Message::ScrollUp.into());
+        }
+
+        if is_down_pressed(&event) {
+            return Some(Message::ScrollDown.into());
+        }
+
+        if is_right_pressed(&event) {
+            return Some(Message::ScrollRight.into());
+        }
+
+        if is_left_pressed(&event) {
+            return Some(Message::ScrollLeft.into());
+        }
+
+        if is_any_key_pressed(&event) {
+            return Some(AppMessage::CloseModal);
         }
 
         None

@@ -1,5 +1,6 @@
 use crate::{
-    app::{Message as AppMessage, Screen, is_quit_key_event},
+    app::{Message as AppMessage, Screen},
+    inputmap::is_quit_pressed,
     widgets::BorderedText,
 };
 use crossterm::event::Event;
@@ -43,7 +44,11 @@ impl Screen for WaitingModal {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        is_quit_key_event(&event)
+        if is_quit_pressed(&event) {
+            Some(AppMessage::Quit)
+        } else {
+            None
+        }
     }
 
     fn update(&mut self, message: AppMessage) -> Option<AppMessage> {
@@ -57,13 +62,14 @@ impl Screen for WaitingModal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyModifiers};
     use insta::assert_snapshot;
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
 
     #[fixture]
     fn terminal() -> Terminal<TestBackend> {
-        Terminal::new(TestBackend::new(80, 24)).unwrap()
+        Terminal::new(TestBackend::new(200, 5)).unwrap()
     }
 
     #[fixture]
@@ -85,12 +91,10 @@ mod tests {
 
     #[rstest]
     fn quit_on_q_key(screen: WaitingModal) {
-        let quit_event = Event::Key(crossterm::event::KeyEvent {
-            code: crossterm::event::KeyCode::Char('q'),
-            modifiers: crossterm::event::KeyModifiers::NONE,
-            kind: crossterm::event::KeyEventKind::Press,
-            state: crossterm::event::KeyEventState::NONE,
-        });
+        let quit_event = Event::Key(crossterm::event::KeyEvent::new(
+            KeyCode::Char('q'),
+            KeyModifiers::NONE,
+        ));
 
         let message = screen.handle_event(quit_event);
         assert_eq!(message, Some(AppMessage::Quit));

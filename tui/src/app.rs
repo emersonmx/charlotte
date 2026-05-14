@@ -390,16 +390,6 @@ impl App {
     }
 }
 
-pub fn is_quit_key_event(event: &Event) -> Option<Message> {
-    if let Event::Key(key_event) = event
-        && key_event.code == crossterm::event::KeyCode::Char('q')
-    {
-        return Some(Message::Quit);
-    }
-
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,30 +523,6 @@ mod tests {
             app.exit_error.unwrap().to_string(),
             "Server was aborted unexpectedly".to_string()
         );
-    }
-
-    #[rstest]
-    fn quit_on_q_key(app: App) {
-        let quit_event = Event::Key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char('q'),
-            crossterm::event::KeyModifiers::NONE,
-        ));
-
-        let message = app.screen.handle_event(quit_event);
-
-        assert_eq!(message, Some(Message::Quit));
-    }
-
-    #[rstest]
-    fn ignore_non_q_key(app: App) {
-        let non_quit_event = Event::Key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char('a'),
-            crossterm::event::KeyModifiers::NONE,
-        ));
-
-        let message = app.screen.handle_event(non_quit_event);
-
-        assert_eq!(message, None);
     }
 
     #[rstest]

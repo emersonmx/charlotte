@@ -1,9 +1,13 @@
 use crate::{
-    app::{Message as AppMessage, RequestEntry, Screen, is_quit_key_event},
+    app::{Message as AppMessage, RequestEntry, Screen},
+    inputmap::{
+        get_section_number, is_back_pressed, is_copy_pressed, is_down_pressed, is_next_tab_pressed,
+        is_previous_tab_pressed, is_quit_pressed, is_up_pressed,
+    },
     theme,
     widgets::{BorderedText, KeyValueTable, KeyValueTableState, Tabs, TextArea, TextAreaState},
 };
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::Event;
 use proxy::http::HeaderMap;
 use ratatui::{
     Frame,
@@ -671,37 +675,36 @@ impl Screen for HttpClientScreen {
     }
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
-        if let Some(message) = is_quit_key_event(&event) {
-            return Some(message);
+        if is_quit_pressed(&event) {
+            return Some(AppMessage::Quit);
         }
 
-        if let Event::Key(key_event) = event {
-            match key_event.code {
-                KeyCode::Left | KeyCode::Char('h') => {
-                    return Some(Message::PreviousTab.into());
-                }
-                KeyCode::Right | KeyCode::Char('l') => {
-                    return Some(Message::NextTab.into());
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    return Some(Message::PreviousRow.into());
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    return Some(Message::NextRow.into());
-                }
-                KeyCode::Char('y') => {
-                    return Some(Message::CopySelectedToClipboard.into());
-                }
-                KeyCode::Char(c @ '1'..='5') => {
-                    if let Some(d @ 1..=5) = c.to_digit(10) {
-                        return Some(Message::SelectSection(d as usize).into());
-                    }
-                }
-                KeyCode::Backspace => {
-                    return Some(AppMessage::ShowRequestsScreen);
-                }
-                _ => {}
-            }
+        if is_previous_tab_pressed(&event) {
+            return Some(Message::PreviousTab.into());
+        }
+
+        if is_next_tab_pressed(&event) {
+            return Some(Message::NextTab.into());
+        }
+
+        if is_up_pressed(&event) {
+            return Some(Message::PreviousRow.into());
+        }
+
+        if is_down_pressed(&event) {
+            return Some(Message::NextRow.into());
+        }
+
+        if is_copy_pressed(&event) {
+            return Some(Message::CopySelectedToClipboard.into());
+        }
+
+        if let Some(section @ 1..=5) = get_section_number(&event) {
+            return Some(Message::SelectSection(section).into());
+        }
+
+        if is_back_pressed(&event) {
+            return Some(AppMessage::ShowRequestsScreen);
         }
 
         None
