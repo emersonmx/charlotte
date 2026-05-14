@@ -163,6 +163,7 @@ impl Screen for ErrorModal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEventKind};
     use insta::assert_snapshot;
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
@@ -251,5 +252,96 @@ mod tests {
     fn draw_modal(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
         terminal.draw(|frame| modal.draw(frame)).unwrap();
         assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn update_scrollbar_state_on_draw(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 0);
+        assert_eq!(modal.scrollbar_horizontal_state.get_position(), 0);
+        modal.scroll_down();
+        modal.scroll_right();
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 0);
+        assert_eq!(modal.scrollbar_horizontal_state.get_position(), 0);
+
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+
+        modal.scroll_down();
+        modal.scroll_right();
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 1);
+        assert_eq!(
+            modal.scrollbar_horizontal_state.get_position(),
+            ErrorModal::X_SCROLL_STEP
+        );
+    }
+
+    #[rstest]
+    fn event_to_message(modal: ErrorModal) {
+        let up_event = Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        let down_event = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        let left_event = Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        let right_event = Event::Key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        let quit_event = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        let any_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        let non_key_event = Event::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+
+        assert_eq!(modal.handle_event(up_event), Some(Message::ScrollUp.into()));
+        assert_eq!(
+            modal.handle_event(down_event),
+            Some(Message::ScrollDown.into())
+        );
+        assert_eq!(
+            modal.handle_event(left_event),
+            Some(Message::ScrollLeft.into())
+        );
+        assert_eq!(
+            modal.handle_event(right_event),
+            Some(Message::ScrollRight.into())
+        );
+        assert_eq!(modal.handle_event(quit_event), Some(AppMessage::Quit));
+        assert_eq!(
+            modal.handle_event(any_key_event),
+            Some(AppMessage::CloseModal)
+        );
+        assert_eq!(modal.handle_event(non_key_event), None);
+    }
+
+    #[rstest]
+    fn update_on_message(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        for _ in 0..5 {
+            modal.scroll_down();
+        }
+        for _ in 0..2 {
+            modal.scroll_right();
+        }
+
+        assert_eq!(modal.update(Message::ScrollUp.into()), None);
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 3);
+
+        assert_eq!(modal.update(Message::ScrollDown.into()), None);
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 4);
+
+        assert_eq!(modal.update(Message::ScrollLeft.into()), None);
+        assert_eq!(
+            modal.scrollbar_horizontal_state.get_position(),
+            ErrorModal::X_SCROLL_STEP
+        );
+
+        assert_eq!(modal.update(Message::ScrollRight.into()), None);
+        assert_eq!(
+            modal.scrollbar_horizontal_state.get_position(),
+            ErrorModal::X_SCROLL_STEP * 2
+        );
+    }
+
+    #[rstest]
+    fn ignore_non_modal_messages(mut modal: ErrorModal) {
+        let non_modal_message = AppMessage::CopyToClipboard("test".to_string());
+        assert_eq!(modal.update(non_modal_message), None);
     }
 }
