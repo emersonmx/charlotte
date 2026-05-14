@@ -34,3 +34,24 @@ impl Clipboard {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn clipboard() -> Clipboard {
+        Clipboard::new().expect("Failed to create clipboard")
+    }
+
+    #[rstest]
+    fn create_clipboard() {
+        let clipboard = Clipboard::new();
+        assert!(
+            clipboard.is_ok(),
+            "Failed to create clipboard: {:?}",
+            clipboard.err()
+        );
+    }
+}
