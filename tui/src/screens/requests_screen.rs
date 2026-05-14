@@ -18,9 +18,9 @@ use ratatui::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    UpdateTableState,
     SelectPreviousRow,
     SelectNextRow,
+    UpdateTableState,
 }
 
 impl From<Message> for AppMessage {
@@ -190,13 +190,6 @@ impl RequestsScreen {
         Some(Message::UpdateTableState.into())
     }
 
-    fn update_table_state(&mut self) -> Option<AppMessage> {
-        self.state.update_table_scroll(self.requests_length());
-        Some(AppMessage::StoreRequestsScreenState(
-            self.state.clone().into(),
-        ))
-    }
-
     fn select_previous_row(&mut self) -> Option<AppMessage> {
         self.state.select_previous_request_entry();
         Some(AppMessage::StoreRequestsScreenState(
@@ -206,6 +199,13 @@ impl RequestsScreen {
 
     fn select_next_row(&mut self) -> Option<AppMessage> {
         self.state.select_next_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
+    }
+
+    fn update_table_state(&mut self) -> Option<AppMessage> {
+        self.state.update_table_scroll(self.requests_length());
         Some(AppMessage::StoreRequestsScreenState(
             self.state.clone().into(),
         ))
@@ -281,10 +281,10 @@ impl Screen for RequestsScreen {
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         match map_event_to_input(&event) {
-            Some(Input::Quit) => Some(AppMessage::Quit),
             Some(Input::Up) => Some(Message::SelectPreviousRow.into()),
             Some(Input::Down) => Some(Message::SelectNextRow.into()),
             Some(Input::Accept) => Some(AppMessage::ShowHttpClientScreen),
+            Some(Input::Quit) => Some(AppMessage::Quit),
             _ => None,
         }
     }
@@ -299,9 +299,9 @@ impl Screen for RequestsScreen {
         };
 
         match message {
-            Message::UpdateTableState => self.update_table_state(),
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
+            Message::UpdateTableState => self.update_table_state(),
         }
     }
 }
