@@ -1,0 +1,28 @@
+---
+source: tui/src/modals/error_modal.rs
+expression: terminal.backend()
+---
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                          ┌Error─────────────────────┐                          "
+"                          │This is a very long error ▲                          "
+"                          │Line 2: Additional details█                          "
+"                          │Line 3: More information a█                          "
+"                          │Line 4: Even more details ║                          "
+"                          │Line 5: Final line of the ║                          "
+"                          │Line 6: This line should b▼                          "
+"                          └◄███═════════════════════►┘                          "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "

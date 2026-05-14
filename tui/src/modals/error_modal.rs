@@ -159,3 +159,90 @@ impl Screen for ErrorModal {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use ratatui::{Terminal, backend::TestBackend};
+    use rstest::{fixture, rstest};
+
+    #[fixture]
+    fn terminal() -> Terminal<TestBackend> {
+        Terminal::new(TestBackend::new(80, 24)).unwrap()
+    }
+
+    #[fixture]
+    fn modal() -> ErrorModal {
+        // Create a long error message to test vertical and horizontal scrolling
+        let txt = [
+            "This is a very long error message that should trigger both vertical and horizontal scrolling in the error modal. It contains multiple lines of text to ensure that the vertical scrollbar is needed.",
+            "Line 2: Additional details about the error that might be helpful for debugging purposes.",
+            "Line 3: More information about the error, including possible causes and solutions.",
+            "Line 4: Even more details to make sure we have enough content to test the scrollbars properly.",
+            "Line 5: Final line of the error message to complete our test case for the error modal.",
+            "Line 6: This line should be hidden initially and only visible after scrolling down.",
+            "Line 7: This line should also be hidden initially and only visible after scrolling down.",
+            "Line 8: This line should also be hidden initially and only visible after scrolling down.",
+            "Line 9: This line should also be hidden initially and only visible after scrolling down.",
+            "Line 10: This line should also be hidden initially and only visible after scrolling down.",
+        ].join("\n");
+        ErrorModal::new(&txt)
+    }
+
+    #[rstest]
+    fn draw_error_modal(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn scroll_up(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        for _ in 0..5 {
+            let message = modal.scroll_down();
+            assert_eq!(message, None);
+        }
+        for _ in 0..3 {
+            let message = modal.scroll_up();
+            assert_eq!(message, None);
+        }
+
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 1);
+    }
+
+    #[rstest]
+    fn scroll_down(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        for _ in 0..5 {
+            let message = modal.scroll_down();
+            assert_eq!(message, None);
+        }
+
+        assert_eq!(modal.scrollbar_vertical_state.get_position(), 4);
+    }
+
+    #[rstest]
+    fn scroll_left(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        modal.scroll_right();
+        modal.scroll_right();
+        modal.scroll_left();
+
+        assert_eq!(
+            modal.scrollbar_horizontal_state.get_position(),
+            ErrorModal::X_SCROLL_STEP
+        );
+    }
+
+    #[rstest]
+    fn scroll_right(mut terminal: Terminal<TestBackend>, mut modal: ErrorModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        modal.scroll_right();
+
+        assert_eq!(
+            modal.scrollbar_horizontal_state.get_position(),
+            ErrorModal::X_SCROLL_STEP
+        );
+    }
+}
