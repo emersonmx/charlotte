@@ -17,12 +17,12 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    CopySelectedToClipboard,
-    NextTab,
-    PreviousTab,
-    SelectSection(usize),
-    NextRow,
     PreviousRow,
+    NextRow,
+    SelectSection(usize),
+    PreviousTab,
+    NextTab,
+    CopySelectedToClipboard,
 }
 
 impl From<Message> for AppMessage {
@@ -394,6 +394,136 @@ impl HttpClientScreen {
         None
     }
 
+    fn previous_row(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_previous();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_previous();
+                }
+                Section::Body => {
+                    self.request_body_state.prev();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_previous();
+                }
+                Section::Body => {
+                    self.response_body_state.prev();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn next_row(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_next();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_next();
+                }
+                Section::Body => {
+                    self.request_body_state.next();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_next();
+                }
+                Section::Body => {
+                    self.response_body_state.next();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn select_section(&mut self, section_index: usize) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => {
+                self.request_section_selected = section_index.into();
+                self.section_selected = self.request_section_selected.clone().into();
+            }
+            Tab::Response => {
+                self.response_section_selected = section_index.into();
+                self.section_selected = self.response_section_selected.clone().into();
+            }
+        };
+
+        self.section_selected = match section_index {
+            1 => Section::Method,
+            2 => Section::Url,
+            _ => self.section_selected.clone(),
+        };
+
+        self.highlight_selected();
+
+        None
+    }
+
+    fn select_previous_tab(&mut self) -> Option<AppMessage> {
+        self.tab_selected = match self.tab_selected {
+            Tab::Request => self.tab_selected.clone(),
+            Tab::Response => Tab::Request,
+        };
+        self.section_selected = match self.section_selected {
+            Section::Method | Section::Url => self.section_selected.clone(),
+            _ => match self.tab_selected {
+                Tab::Request => self.request_section_selected.clone().into(),
+                Tab::Response => self.response_section_selected.clone().into(),
+            },
+        };
+        self.highlight_selected();
+        None
+    }
+
+    fn highlight_selected(&mut self) {
+        self.query_params_table_state.set_highlighted(false);
+        self.request_headers_table_state.set_highlighted(false);
+        self.response_headers_table_state.set_highlighted(false);
+
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => self.query_params_table_state.set_highlighted(true),
+                Section::Headers => self.request_headers_table_state.set_highlighted(true),
+                _ => {}
+            },
+            Tab::Response => {
+                if self.section_selected == Section::Headers {
+                    self.response_headers_table_state.set_highlighted(true)
+                }
+            }
+        };
+    }
+
+    fn select_next_tab(&mut self) -> Option<AppMessage> {
+        self.tab_selected = match self.tab_selected {
+            Tab::Request => Tab::Response,
+            Tab::Response => self.tab_selected.clone(),
+        };
+        self.section_selected = match self.section_selected {
+            Section::Method | Section::Url => self.section_selected.clone(),
+            _ => match self.tab_selected {
+                Tab::Request => self.request_section_selected.clone().into(),
+                Tab::Response => self.response_section_selected.clone().into(),
+            },
+        };
+        self.highlight_selected();
+        None
+    }
+
     fn copy_selected_to_clipboard(&mut self) -> Option<AppMessage> {
         let request_entry = &self.request_entry;
 
@@ -465,136 +595,6 @@ impl HttpClientScreen {
             .as_ref()
             .map(|response| String::from_utf8_lossy(response.body.as_bytes()).to_string())
             .unwrap_or_default()
-    }
-
-    fn select_previous_tab(&mut self) -> Option<AppMessage> {
-        self.tab_selected = match self.tab_selected {
-            Tab::Request => self.tab_selected.clone(),
-            Tab::Response => Tab::Request,
-        };
-        self.section_selected = match self.section_selected {
-            Section::Method | Section::Url => self.section_selected.clone(),
-            _ => match self.tab_selected {
-                Tab::Request => self.request_section_selected.clone().into(),
-                Tab::Response => self.response_section_selected.clone().into(),
-            },
-        };
-        self.highlight_selected();
-        None
-    }
-
-    fn select_next_tab(&mut self) -> Option<AppMessage> {
-        self.tab_selected = match self.tab_selected {
-            Tab::Request => Tab::Response,
-            Tab::Response => self.tab_selected.clone(),
-        };
-        self.section_selected = match self.section_selected {
-            Section::Method | Section::Url => self.section_selected.clone(),
-            _ => match self.tab_selected {
-                Tab::Request => self.request_section_selected.clone().into(),
-                Tab::Response => self.response_section_selected.clone().into(),
-            },
-        };
-        self.highlight_selected();
-        None
-    }
-
-    fn highlight_selected(&mut self) {
-        self.query_params_table_state.set_highlighted(false);
-        self.request_headers_table_state.set_highlighted(false);
-        self.response_headers_table_state.set_highlighted(false);
-
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => self.query_params_table_state.set_highlighted(true),
-                Section::Headers => self.request_headers_table_state.set_highlighted(true),
-                _ => {}
-            },
-            Tab::Response => {
-                if self.section_selected == Section::Headers {
-                    self.response_headers_table_state.set_highlighted(true)
-                }
-            }
-        };
-    }
-
-    fn select_section(&mut self, section_index: usize) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => {
-                self.request_section_selected = section_index.into();
-                self.section_selected = self.request_section_selected.clone().into();
-            }
-            Tab::Response => {
-                self.response_section_selected = section_index.into();
-                self.section_selected = self.response_section_selected.clone().into();
-            }
-        };
-
-        self.section_selected = match section_index {
-            1 => Section::Method,
-            2 => Section::Url,
-            _ => self.section_selected.clone(),
-        };
-
-        self.highlight_selected();
-
-        None
-    }
-
-    fn next_row(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_next();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_next();
-                }
-                Section::Body => {
-                    self.request_body_state.next();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_next();
-                }
-                Section::Body => {
-                    self.response_body_state.next();
-                }
-                _ => {}
-            },
-        }
-
-        None
-    }
-
-    fn previous_row(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_previous();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_previous();
-                }
-                Section::Body => {
-                    self.request_body_state.prev();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_previous();
-                }
-                Section::Body => {
-                    self.response_body_state.prev();
-                }
-                _ => {}
-            },
-        }
-
-        None
     }
 }
 
@@ -673,14 +673,14 @@ impl Screen for HttpClientScreen {
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         match map_event_to_input(&event) {
-            Some(Input::Quit) => Some(AppMessage::Quit),
-            Some(Input::PreviousTab) => Some(Message::PreviousTab.into()),
-            Some(Input::NextTab) => Some(Message::NextTab.into()),
             Some(Input::Up) => Some(Message::PreviousRow.into()),
             Some(Input::Down) => Some(Message::NextRow.into()),
-            Some(Input::Copy) => Some(Message::CopySelectedToClipboard.into()),
             Some(Input::Section(section @ 1..=5)) => Some(Message::SelectSection(section).into()),
+            Some(Input::PreviousTab) => Some(Message::PreviousTab.into()),
+            Some(Input::NextTab) => Some(Message::NextTab.into()),
+            Some(Input::Copy) => Some(Message::CopySelectedToClipboard.into()),
             Some(Input::Back) => Some(AppMessage::ShowRequestsScreen),
+            Some(Input::Quit) => Some(AppMessage::Quit),
             _ => None,
         }
     }
@@ -695,12 +695,12 @@ impl Screen for HttpClientScreen {
         };
 
         match message {
-            Message::CopySelectedToClipboard => self.copy_selected_to_clipboard(),
+            Message::PreviousRow => self.previous_row(),
+            Message::NextRow => self.next_row(),
+            Message::SelectSection(section) => self.select_section(section),
             Message::PreviousTab => self.select_previous_tab(),
             Message::NextTab => self.select_next_tab(),
-            Message::SelectSection(section) => self.select_section(section),
-            Message::NextRow => self.next_row(),
-            Message::PreviousRow => self.previous_row(),
+            Message::CopySelectedToClipboard => self.copy_selected_to_clipboard(),
         }
     }
 }
