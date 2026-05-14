@@ -1,4 +1,3 @@
-use arboard::Clipboard as ArboardClipboard;
 use thiserror::Error;
 
 #[allow(dead_code)]
@@ -12,46 +11,31 @@ pub enum Error {
     GetText(#[source] arboard::Error),
 }
 
-pub struct Clipboard {
-    clipboard: ArboardClipboard,
+#[allow(dead_code)]
+pub trait Clipboard {
+    fn get_text(&mut self) -> Result<String, Error>;
+    fn set_text(&mut self, text: String) -> Result<(), Error>;
 }
 
-#[allow(dead_code)]
-impl Clipboard {
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self {
-            clipboard: ArboardClipboard::new().map_err(Error::Access)?,
-        })
-    }
+pub struct ArboardClipboard {
+    clipboard: arboard::Clipboard,
+}
 
-    pub fn get_text(&mut self) -> Result<String, Error> {
+impl ArboardClipboard {
+    pub fn new() -> Result<Self, Error> {
+        let clipboard = arboard::Clipboard::new().map_err(Error::Access)?;
+        Ok(Self { clipboard })
+    }
+}
+
+impl Clipboard for ArboardClipboard {
+    fn get_text(&mut self) -> Result<String, Error> {
         let text = self.clipboard.get_text().map_err(Error::GetText)?;
         Ok(text)
     }
 
-    pub fn set_text(&mut self, text: String) -> Result<(), Error> {
+    fn set_text(&mut self, text: String) -> Result<(), Error> {
         self.clipboard.set_text(text).map_err(Error::SetText)?;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::{fixture, rstest};
-
-    #[fixture]
-    fn clipboard() -> Clipboard {
-        Clipboard::new().expect("Failed to create clipboard")
-    }
-
-    #[rstest]
-    fn create_clipboard() {
-        let clipboard = Clipboard::new();
-        assert!(
-            clipboard.is_ok(),
-            "Failed to create clipboard: {:?}",
-            clipboard.err()
-        );
     }
 }

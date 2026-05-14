@@ -1,5 +1,5 @@
 use crate::{
-    clipboard::Clipboard,
+    clipboard::{ArboardClipboard, Clipboard},
     config::Config,
     modals::{ErrorModal, ErrorModalMessage, WaitingModal},
     screens::{
@@ -81,7 +81,7 @@ pub struct App {
     modal: Option<BoxedScreen>,
     request_store: RequestStore,
     requests_screen_state: RequestsScreenState,
-    clipboard: Clipboard,
+    clipboard: Box<dyn Clipboard>,
     running: bool,
     exit_error: Option<anyhow::Error>,
 }
@@ -92,7 +92,8 @@ impl App {
     pub fn new(config: Config) -> anyhow::Result<Self> {
         let modal = Box::new(WaitingModal::new(&config.server_host, config.server_port));
         let request_store = RequestStore::new(Mutex::new(BTreeMap::new()));
-        let clipboard = Clipboard::new()?;
+        let arboard_clipboard = ArboardClipboard::new()?;
+        let clipboard = Box::new(arboard_clipboard);
 
         let requests_screen_state = RequestsScreenState::default();
         let screen = Box::new(RequestsScreen::new(
