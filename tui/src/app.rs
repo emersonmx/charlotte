@@ -393,8 +393,8 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use insta::assert_snapshot;
-    use proxy::http::{Body, HeaderMap, Method};
     use ratatui::{Terminal, backend::TestBackend, widgets::TableState};
     use rstest::{fixture, rstest};
 
@@ -414,21 +414,145 @@ mod tests {
     }
 
     #[rstest]
-    fn show_waiting_message(mut terminal: Terminal<TestBackend>, mut app: App) {
+    fn create_app(app: App) {
+        assert_eq!(app.config.server_host, "localhost");
+        assert_eq!(app.config.server_port, 8888);
+        assert!(app.modal.is_some());
+        assert!(app.running);
+        assert!(app.exit_error.is_none());
+    }
+
+    #[rstest]
+    fn draw_app(mut terminal: Terminal<TestBackend>, mut app: App) {
         terminal.draw(|frame| app.draw(frame)).unwrap();
 
         assert_snapshot!(terminal.backend());
     }
 
     #[rstest]
-    fn handle_store_request_message(mut app: App) {
+    fn draw_non_modal_app(mut terminal: Terminal<TestBackend>, mut app: App) {
+        app.modal = None;
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn event_to_message_with_modal(app: App) {
+        let quit_event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        let message = app.handle_event_stream(quit_event);
+
+        assert_eq!(message, None);
+    }
+
+    #[rstest]
+    fn event_to_message_without_modal(mut app: App) {
+        app.modal = None;
+        let quit_event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        let message = app.handle_event_stream(quit_event);
+
+        assert_eq!(message, Some(Message::ShowHttpClientScreen));
+    }
+
+    #[tokio::test]
+    #[rstest]
+    #[case(
+        ProxyMessage::RequestSent((RequestId::new(1), Request::default())),
+        Some(Message::StoreRequest((RequestId::new(1), Request::default()).into()))
+    )]
+    #[case(
+        ProxyMessage::ResponseReceived((RequestId::new(1), Response::default())),
+        Some(Message::StoreResponse((RequestId::new(1), Response::default()).into()))
+    )]
+    #[case(
+        ProxyMessage::ErrorOccurred((
+            None,
+            ServerError::AcceptConnection("TEST ERROR".to_string().into()).into()
+        )),
+        Some(Message::ShowErrorModal("Error occurred: AcceptConnection(\n    \"TEST ERROR\",\n)".to_string()))
+    )]
+    #[case(
+        ProxyMessage::ErrorOccurred((
+            Some(RequestId::new(1)),
+            ServerError::AcceptConnection("TEST ERROR".to_string().into()).into()
+        )),
+        Some(Message::ShowErrorModal("Error occurred for request 1: AcceptConnection(\n    \"TEST ERROR\",\n)".to_string()))
+    )]
+    async fn proxy_message_to_app_message(
+        #[case] proxy_message: ProxyMessage,
+        #[case] app_message: Option<Message>,
+        mut app: App,
+    ) {
+        let message = app.handle_proxy_message(proxy_message).await;
+
+        assert_eq!(message, app_message);
+    }
+
+    #[tokio::test]
+    #[rstest]
+    async fn abort_app_with_proxy_error(mut app: App) {
+        let error = Ok(Err(ServerError::AcceptConnection("TEST ERROR".into())));
+
+        let message = app.handle_abort_app(error).await;
+
+        assert_eq!(message, Some(Message::Quit));
+        assert_eq!(
+            app.exit_error.unwrap().to_string(),
+            "Failed to accept connection: TEST ERROR".to_string()
+        );
+    }
+
+    #[tokio::test]
+    #[rstest]
+    async fn abort_app_with_recv_error(mut app: App) {
+        let (tx, rx) = oneshot::channel::<Result<(), ServerError>>();
+        drop(tx);
+        let error = rx.await.unwrap_err();
+
+        let message = app.handle_abort_app(Err(error)).await;
+
+        assert_eq!(message, Some(Message::Quit));
+        assert_eq!(
+            app.exit_error.unwrap().to_string(),
+            "Server was aborted unexpectedly".to_string()
+        );
+    }
+
+    #[rstest]
+    fn show_requests_screen(mut app: App) {
+        let old_screen = app.screen.as_ref() as *const dyn Screen;
+        let message = app.update(Message::ShowRequestsScreen);
+
+        assert_eq!(
+            message,
+            Some(Message::RequestsScreen(
+                RequestsScreenMessage::UpdateTableState
+            ))
+        );
+        assert_ne!(app.screen.as_ref() as *const dyn Screen, old_screen);
+    }
+
+    #[rstest]
+    fn show_http_client_screen(mut app: App) {
+        let old_screen = app.screen.as_ref() as *const dyn Screen;
+        app.request_store
+            .lock()
+            .unwrap()
+            .insert(RequestId::new(1), RequestEntry::default());
+        app.requests_screen_state.selected_request_entry = Some(0);
+
+        let message = app.update(Message::ShowHttpClientScreen);
+
+        assert_eq!(message, None);
+        assert_ne!(app.screen.as_ref() as *const dyn Screen, old_screen);
+    }
+
+    #[rstest]
+    fn store_request_message(mut app: App) {
         let request_id = RequestId::new(1);
-        let request = Request {
-            method: Method::GET,
-            url: "http://example.com".into(),
-            headers: HeaderMap::new(vec![]),
-            body: Body::new(vec![]),
-        };
+        let request = Request::default();
         let store_message = Message::StoreRequest(Box::new((request_id, request.clone())));
         let expected_message = Message::RequestEntryUpdated(Box::new(RequestEntry {
             request_id,
@@ -442,20 +566,11 @@ mod tests {
     }
 
     #[rstest]
-    fn handle_store_response_message(mut app: App) {
+    fn store_response_message(mut app: App) {
         let request_id = RequestId::new(1);
-        let request = Request {
-            method: Method::GET,
-            url: "http://example.com".into(),
-            headers: HeaderMap::new(vec![]),
-            body: Body::new(vec![]),
-        };
+        let request = Request::default();
         app.store_request((request_id, request.clone()));
-        let response = Response {
-            status: 200.try_into().unwrap(),
-            headers: HeaderMap::new(vec![]),
-            body: Body::new(vec![]),
-        };
+        let response = Response::default();
         let store_message = Message::StoreResponse(Box::new((request_id, response.clone())));
         let expected_message = Message::RequestEntryUpdated(Box::new(RequestEntry {
             request_id,
@@ -469,15 +584,53 @@ mod tests {
     }
 
     #[rstest]
-    fn handle_quit_message(mut app: App) {
+    fn copy_to_clipboard_message(mut app: App) {
+        let content = "Test clipboard content".to_string();
+        let message = Message::CopyToClipboard(content.clone());
+
+        let result_message = app.update(message);
+
+        assert_eq!(result_message, None);
+        assert_eq!(app.clipboard.get_text().unwrap(), content);
+    }
+
+    #[rstest]
+    fn quit_message(mut app: App) {
         let message = app.update(Message::Quit);
 
         assert_eq!(message, None);
         assert!(!app.running);
+        assert!(app.exit_error.is_none());
     }
 
     #[rstest]
-    fn handle_non_app_message(mut app: App) {
+    fn show_error_modal_message(mut terminal: Terminal<TestBackend>, mut app: App) {
+        let content = "Test error message".to_string();
+        let message = Message::ShowErrorModal(content.clone());
+
+        let result_message = app.update(message);
+
+        assert_eq!(result_message, None);
+        assert!(app.modal.is_some());
+
+        let modal = app.modal.as_mut().unwrap();
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
+        assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn close_modal_message(mut app: App) {
+        app.modal = Some(Box::new(WaitingModal::new("localhost", 8888)));
+        let message = Message::CloseModal;
+
+        let result_message = app.update(message);
+
+        assert_eq!(result_message, None);
+        assert!(app.modal.is_none());
+    }
+
+    #[rstest]
+    fn non_app_message_with_modal(mut app: App) {
         let non_app_message = Message::RequestsScreen(RequestsScreenMessage::SelectNextRow);
 
         let message = app.update(non_app_message);
@@ -495,47 +648,23 @@ mod tests {
         );
     }
 
-    #[tokio::test]
     #[rstest]
-    async fn handle_abort_app_with_proxy_error(mut app: App) {
-        let error = Ok(Err(ServerError::AcceptConnection("TEST ERROR".into())));
+    fn non_app_message_without_modal(mut app: App) {
+        app.modal = None;
+        let non_app_message = Message::RequestsScreen(RequestsScreenMessage::SelectNextRow);
 
-        let message = app.handle_abort_app(error).await;
+        let message = app.update(non_app_message);
 
-        assert_eq!(message, Some(Message::Quit));
         assert_eq!(
-            app.exit_error.unwrap().to_string(),
-            "Failed to accept connection: TEST ERROR".to_string()
+            message,
+            Some(Message::StoreRequestsScreenState(
+                RequestsScreenState {
+                    selected_request_entry: Some(0),
+                    table_state: TableState::default().with_selected(Some(0)),
+                    ..Default::default()
+                }
+                .into()
+            ))
         );
-    }
-
-    #[tokio::test]
-    #[rstest]
-    async fn handle_abort_app_with_recv_error(mut app: App) {
-        let (tx, rx) = oneshot::channel::<Result<(), ServerError>>();
-        drop(tx);
-        let error = rx.await.unwrap_err();
-
-        let message = app.handle_abort_app(Err(error)).await;
-
-        assert_eq!(message, Some(Message::Quit));
-        assert_eq!(
-            app.exit_error.unwrap().to_string(),
-            "Server was aborted unexpectedly".to_string()
-        );
-    }
-
-    #[rstest]
-    fn ignore_non_key_event(app: App) {
-        let non_key_event = Event::Mouse(crossterm::event::MouseEvent {
-            kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
-            column: 0,
-            row: 0,
-            modifiers: crossterm::event::KeyModifiers::NONE,
-        });
-
-        let message = app.screen.handle_event(non_key_event);
-
-        assert_eq!(message, None);
     }
 }
