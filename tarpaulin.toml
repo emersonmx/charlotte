@@ -1,0 +1,10 @@
+[config]
+skip-clean = true
+exclude-files = [
+    "proxy/src/lib.rs",
+    "tui/src/cli.rs",
+    "tui/src/main.rs",
+    "tui/src/modals.rs",
+    "tui/src/screens.rs",
+    "tui/src/theme.rs",
+]
