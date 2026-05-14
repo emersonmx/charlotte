@@ -115,17 +115,6 @@ impl App {
         })
     }
 
-    fn make_requests_screen(&self) -> RequestsScreen {
-        RequestsScreen::new(
-            self.request_store.clone(),
-            self.requests_screen_state.clone(),
-        )
-    }
-
-    fn make_http_client_screen(&self, request_entry: RequestEntry) -> HttpClientScreen {
-        HttpClientScreen::new(request_entry)
-    }
-
     pub async fn run(&mut self, terminal: &mut DefaultTerminal) -> anyhow::Result<()> {
         let (abort_app_tx, abort_app_rx) = oneshot::channel();
         let (abort_server_tx, abort_server_rx) = oneshot::channel();
@@ -290,6 +279,17 @@ impl App {
             Message::CloseModal => self.close_modal(),
             message => self.update_modal_and_screen(message),
         }
+    }
+
+    fn make_requests_screen(&self) -> RequestsScreen {
+        RequestsScreen::new(
+            self.request_store.clone(),
+            self.requests_screen_state.clone(),
+        )
+    }
+
+    fn make_http_client_screen(&self, request_entry: RequestEntry) -> HttpClientScreen {
+        HttpClientScreen::new(request_entry)
     }
 
     fn show_requests_screen(&mut self) -> Option<Message> {
