@@ -60,8 +60,10 @@ impl Screen for WaitingModal {
 
 #[cfg(test)]
 mod tests {
+    use crate::app::RequestEntry;
+
     use super::*;
-    use crossterm::event::{KeyCode, KeyModifiers};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use insta::assert_snapshot;
     use ratatui::{Terminal, backend::TestBackend};
     use rstest::{fixture, rstest};
@@ -72,30 +74,46 @@ mod tests {
     }
 
     #[fixture]
-    fn screen() -> WaitingModal {
+    fn modal() -> WaitingModal {
         WaitingModal::new("localhost", 8888)
     }
 
     #[rstest]
-    fn create_modal(screen: WaitingModal) {
-        assert_eq!(screen.server_host, "localhost");
-        assert_eq!(screen.server_port, 8888);
+    fn create_modal(modal: WaitingModal) {
+        assert_eq!(modal.server_host, "localhost");
+        assert_eq!(modal.server_port, 8888);
     }
 
     #[rstest]
-    fn quit_on_q_key(screen: WaitingModal) {
-        let quit_event = Event::Key(crossterm::event::KeyEvent::new(
-            KeyCode::Char('q'),
-            KeyModifiers::NONE,
-        ));
-
-        let message = screen.handle_event(quit_event);
-        assert_eq!(message, Some(AppMessage::Quit));
-    }
-
-    #[rstest]
-    fn draw_modal(mut terminal: Terminal<TestBackend>, mut screen: WaitingModal) {
-        terminal.draw(|frame| screen.draw(frame)).unwrap();
+    fn draw_modal(mut terminal: Terminal<TestBackend>, mut modal: WaitingModal) {
+        terminal.draw(|frame| modal.draw(frame)).unwrap();
         assert_snapshot!(terminal.backend());
+    }
+
+    #[rstest]
+    fn event_to_message(modal: WaitingModal) {
+        let quit_event = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        let non_quit_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+
+        assert_eq!(modal.handle_event(quit_event), Some(AppMessage::Quit));
+        assert_eq!(modal.handle_event(non_quit_event), None);
+    }
+
+    #[rstest]
+    fn update_on_message(mut modal: WaitingModal) {
+        assert_eq!(
+            modal.update(AppMessage::RequestEntryUpdated(
+                RequestEntry::default().into()
+            )),
+            Some(AppMessage::CloseModal)
+        );
+    }
+
+    #[rstest]
+    fn ignore_non_modal_messages(mut modal: WaitingModal) {
+        assert_eq!(
+            modal.update(AppMessage::CopyToClipboard("test".to_string())),
+            None
+        );
     }
 }
