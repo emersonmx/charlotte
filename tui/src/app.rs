@@ -1,7 +1,7 @@
 use crate::{
     clipboard::{ArboardClipboard, Clipboard},
     config::Config,
-    modals::{ErrorModal, ErrorModalMessage, WaitingModal},
+    modals::{ErrorModal, ErrorModalMessage, ShortcutsModal, ShortcutsModalMessage, WaitingModal},
     screens::{
         HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
         RequestsScreenState,
@@ -39,8 +39,10 @@ pub enum Message {
     Quit,
     // Modal-specific
     ShowErrorModal(String),
+    ShowShortcutsModal,
     CloseModal,
     ErrorModal(ErrorModalMessage),
+    ShortcutsModal(ShortcutsModalMessage),
     // Screen-specific
     RequestsScreen(RequestsScreenMessage),
     HttpClientScreen(HttpClientScreenMessage),
@@ -277,6 +279,7 @@ impl App {
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
             Message::ShowErrorModal(content) => self.show_error_modal(content),
+            Message::ShowShortcutsModal => self.show_shortcuts_modal(),
             Message::CloseModal => self.close_modal(),
             message => self.update_modal_and_screen(message),
         }
@@ -371,6 +374,11 @@ impl App {
 
     fn show_error_modal(&mut self, content: String) -> Option<Message> {
         self.modal = Some(Box::new(ErrorModal::new(&content)));
+        None
+    }
+
+    fn show_shortcuts_modal(&mut self) -> Option<Message> {
+        self.modal = Some(Box::new(ShortcutsModal::new()));
         None
     }
 

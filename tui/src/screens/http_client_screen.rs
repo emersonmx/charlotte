@@ -680,6 +680,7 @@ impl Screen for HttpClientScreen {
             Some(Input::NextTab) => Some(Message::NextTab.into()),
             Some(Input::Copy) => Some(Message::CopySelectedToClipboard.into()),
             Some(Input::Back) => Some(AppMessage::ShowRequestsScreen),
+            Some(Input::Help) => Some(AppMessage::ShowShortcutsModal),
             Some(Input::Quit) => Some(AppMessage::Quit),
             _ => None,
         }

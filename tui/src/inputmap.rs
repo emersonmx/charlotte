@@ -16,6 +16,7 @@ pub enum Input {
     Copy,
     PreviousTab,
     NextTab,
+    Help,
     Quit,
     UnmappedKey,
 }
@@ -39,6 +40,7 @@ pub fn map_event_to_input(event: &Event) -> Option<Input> {
             KeyCode::Char('y') => Some(Input::Copy),
             KeyCode::BackTab | KeyCode::Char('[') => Some(Input::PreviousTab),
             KeyCode::Tab | KeyCode::Char(']') => Some(Input::NextTab),
+            KeyCode::Char('?') | KeyCode::F(1) => Some(Input::Help),
             KeyCode::Char('q') => Some(Input::Quit),
             _ => Some(Input::UnmappedKey),
         },
