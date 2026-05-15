@@ -140,7 +140,7 @@ impl Screen for ErrorModal {
             Some(Input::Left) => Some(Message::ScrollLeft.into()),
             Some(Input::Right) => Some(Message::ScrollRight.into()),
             Some(Input::Quit) => Some(AppMessage::Quit),
-            Some(Input::AnyKey) => Some(AppMessage::CloseModal),
+            Some(_) => Some(AppMessage::CloseModal),
             _ => None,
         }
     }
