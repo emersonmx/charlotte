@@ -69,8 +69,8 @@ pub struct RequestEntry {
     pub response: Option<Response>,
 }
 
-pub type BoxedScreen = Box<dyn Screen>;
 pub type RequestStore = Arc<Mutex<BTreeMap<RequestId, RequestEntry>>>;
+type BoxedScreen = Box<dyn Screen>;
 
 pub struct App {
     abort_app_rx: Option<oneshot::Receiver<Result<(), ServerError>>>,
