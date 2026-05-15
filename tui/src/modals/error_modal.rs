@@ -281,7 +281,7 @@ mod tests {
         let left_event = Event::Key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         let right_event = Event::Key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
         let quit_event = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
-        let any_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        let unmapped_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         let non_key_event = Event::Mouse(crossterm::event::MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: 0,
@@ -304,7 +304,7 @@ mod tests {
         );
         assert_eq!(modal.handle_event(quit_event), Some(AppMessage::Quit));
         assert_eq!(
-            modal.handle_event(any_key_event),
+            modal.handle_event(unmapped_key_event),
             Some(AppMessage::CloseModal)
         );
         assert_eq!(modal.handle_event(non_key_event), None);

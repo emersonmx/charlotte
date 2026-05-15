@@ -17,7 +17,7 @@ pub enum Input {
     PreviousTab,
     NextTab,
     Quit,
-    AnyKey,
+    UnmappedKey,
 }
 
 pub fn map_event_to_input(event: &Event) -> Option<Input> {
@@ -40,7 +40,7 @@ pub fn map_event_to_input(event: &Event) -> Option<Input> {
             KeyCode::BackTab | KeyCode::Char('[') => Some(Input::PreviousTab),
             KeyCode::Tab | KeyCode::Char(']') => Some(Input::NextTab),
             KeyCode::Char('q') => Some(Input::Quit),
-            _ => Some(Input::AnyKey),
+            _ => Some(Input::UnmappedKey),
         },
         _ => None,
     }
@@ -71,7 +71,7 @@ mod tests {
         let prev_tab_event = Event::Key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE));
         let next_tab_event = Event::Key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
         let quit_event = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
-        let any_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        let unmapped_key_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         let non_key_event = Event::Mouse(MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: 0,
@@ -97,7 +97,10 @@ mod tests {
         );
         assert_eq!(map_event_to_input(&next_tab_event), Some(Input::NextTab));
         assert_eq!(map_event_to_input(&quit_event), Some(Input::Quit));
-        assert_eq!(map_event_to_input(&any_key_event), Some(Input::AnyKey));
+        assert_eq!(
+            map_event_to_input(&unmapped_key_event),
+            Some(Input::UnmappedKey)
+        );
         assert_eq!(map_event_to_input(&non_key_event), None);
     }
 }
