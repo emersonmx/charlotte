@@ -252,8 +252,7 @@ impl Request {
         B: hyper::body::Body,
         B::Error: std::fmt::Debug,
     {
-        let (mut parts, body) = req.into_parts();
-        Self::clean_headers(&mut parts.headers);
+        let (parts, body) = req.into_parts();
         let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
@@ -269,6 +268,15 @@ impl Request {
             headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
+    }
+
+    pub(crate) fn to_hyper_request(
+        parts: hyper::http::request::Parts,
+        body: BoxBody<Bytes, Error>,
+    ) -> hyper::Request<BoxBody<Bytes, Error>> {
+        let mut req = hyper::Request::from_parts(parts, body);
+        Self::clean_headers(req.headers_mut());
+        req
     }
 
     fn clean_headers(headers: &mut HyperHeaderMap) {
@@ -375,8 +383,7 @@ impl Response {
         B: hyper::body::Body,
         B::Error: std::fmt::Debug,
     {
-        let (mut parts, body) = res.into_parts();
-        Self::clean_headers(&mut parts.headers);
+        let (parts, body) = res.into_parts();
         let body = Self::read_body(&parts, body).await?;
         Ok((parts, body))
     }
@@ -391,6 +398,15 @@ impl Response {
             headers: parts.headers.clone().into(),
             body: Body::new(body.to_vec()),
         })
+    }
+
+    pub(crate) fn to_hyper_response(
+        parts: hyper::http::response::Parts,
+        body: BoxBody<Bytes, Error>,
+    ) -> hyper::Response<BoxBody<Bytes, Error>> {
+        let mut res = hyper::Response::from_parts(parts, body);
+        Self::clean_headers(res.headers_mut());
+        res
     }
 
     fn clean_headers(headers: &mut HyperHeaderMap) {

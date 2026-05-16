@@ -244,7 +244,7 @@ impl Server {
             .send(Message::RequestSent((RequestId::new(request_id), request)))
             .await;
 
-        let req = HyperRequest::from_parts(parts, body.boxed());
+        let req = Request::to_hyper_request(parts, body.boxed());
 
         if let Ok(addr) = get_target_addr(req.uri(), req.headers()) {
             let self_clone = self.clone();
@@ -297,7 +297,7 @@ impl Server {
             )))
             .await;
 
-        let res = HyperResponse::from_parts(parts, body.boxed());
+        let res = Response::to_hyper_response(parts, body.boxed());
         Ok(res)
     }
 
@@ -403,7 +403,7 @@ impl Server {
 
         let self_clone = self.clone();
         let res = self_clone
-            .fetch(HyperRequest::from_parts(parts, body.boxed()))
+            .fetch(Request::to_hyper_request(parts, body.boxed()))
             .await?;
 
         let (parts, body) = Response::into_parts(res).await.map_err(Error::Http)?;
@@ -418,7 +418,7 @@ impl Server {
             )))
             .await;
 
-        Ok(HyperResponse::from_parts(parts, body.boxed()))
+        Ok(Response::to_hyper_response(parts, body.boxed()))
     }
 
     async fn fetch(self: Arc<Self>, req: HyperRequest) -> Result<IncomingResponse, Error> {
@@ -442,7 +442,7 @@ impl Server {
         })?;
         let _ = parts.headers.insert(hyper::header::HOST, host_value);
 
-        let req = HyperRequest::from_parts(parts, body);
+        let req = Request::to_hyper_request(parts, body);
 
         if is_tls {
             self.fetch_tls(req, stream, host, addr).await
