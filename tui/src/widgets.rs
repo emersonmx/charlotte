@@ -157,6 +157,16 @@ impl KeyValueTableState {
         self.scrollbar_state.prev();
     }
 
+    pub fn select_first(&mut self) {
+        self.table_state.select_first();
+        self.scrollbar_state.first();
+    }
+
+    pub fn select_last(&mut self) {
+        self.table_state.select_last();
+        self.scrollbar_state.last();
+    }
+
     pub fn set_highlighted(&mut self, highlighted: bool) {
         self.is_highlighted = highlighted;
         if self.is_highlighted && self.table_state.selected().is_none() {
@@ -274,6 +284,14 @@ impl TextAreaState {
 
     pub fn prev(&mut self) {
         self.scrollbar_state.prev();
+    }
+
+    pub fn first(&mut self) {
+        self.scrollbar_state.first();
+    }
+
+    pub fn last(&mut self) {
+        self.scrollbar_state.last();
     }
 }
 

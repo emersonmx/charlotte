@@ -17,8 +17,12 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Message {
-    PreviousRow,
-    NextRow,
+    ScrollUp,
+    ScrollDown,
+    ScrollToFirst,
+    ScrollToLast,
+    PageUp,
+    PageDown,
     SelectSection(usize),
     PreviousTab,
     NextTab,
@@ -171,6 +175,7 @@ impl HttpClientScreen {
     const QUERY_PARAMS_LABEL: &str = "Query Parameters";
     const HEADERS_LABEL: &str = "Headers";
     const BODY_LABEL: &str = "Body";
+    const PAGE_SCROLL_STEP: usize = 10;
 
     pub fn new(request_entry: RequestEntry) -> Self {
         let request_query_params_column_widths = request_entry.request.url.query_pairs().into();
@@ -394,7 +399,7 @@ impl HttpClientScreen {
         None
     }
 
-    fn previous_row(&mut self) -> Option<AppMessage> {
+    fn scroll_up(&mut self) -> Option<AppMessage> {
         match self.tab_selected {
             Tab::Request => match self.section_selected {
                 Section::QueryParams => {
@@ -422,7 +427,7 @@ impl HttpClientScreen {
         None
     }
 
-    fn next_row(&mut self) -> Option<AppMessage> {
+    fn scroll_down(&mut self) -> Option<AppMessage> {
         match self.tab_selected {
             Tab::Request => match self.section_selected {
                 Section::QueryParams => {
@@ -447,6 +452,137 @@ impl HttpClientScreen {
             },
         }
 
+        None
+    }
+
+    fn scroll_to_first(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_first();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_first();
+                }
+                Section::Body => {
+                    self.request_body_state.first();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_first();
+                }
+                Section::Body => {
+                    self.response_body_state.first();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn scroll_to_last(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    self.query_params_table_state.select_last();
+                }
+                Section::Headers => {
+                    self.request_headers_table_state.select_last();
+                }
+                Section::Body => {
+                    self.request_body_state.last();
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    self.response_headers_table_state.select_last();
+                }
+                Section::Body => {
+                    self.response_body_state.last();
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn page_up(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.query_params_table_state.select_previous();
+                    }
+                }
+                Section::Headers => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.request_headers_table_state.select_previous();
+                    }
+                }
+                Section::Body => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.request_body_state.prev();
+                    }
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.response_headers_table_state.select_previous();
+                    }
+                }
+                Section::Body => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.response_body_state.prev();
+                    }
+                }
+                _ => {}
+            },
+        }
+
+        None
+    }
+
+    fn page_down(&mut self) -> Option<AppMessage> {
+        match self.tab_selected {
+            Tab::Request => match self.section_selected {
+                Section::QueryParams => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.query_params_table_state.select_next();
+                    }
+                }
+                Section::Headers => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.request_headers_table_state.select_next();
+                    }
+                }
+                Section::Body => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.request_body_state.next();
+                    }
+                }
+                _ => {}
+            },
+            Tab::Response => match self.section_selected {
+                Section::Headers => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.response_headers_table_state.select_next();
+                    }
+                }
+                Section::Body => {
+                    for _ in 0..Self::PAGE_SCROLL_STEP {
+                        self.response_body_state.next();
+                    }
+                }
+                _ => {}
+            },
+        }
         None
     }
 
@@ -673,8 +809,12 @@ impl Screen for HttpClientScreen {
 
     fn handle_event(&self, event: Event) -> Option<AppMessage> {
         match map_event_to_input(&event) {
-            Some(Input::Up) => Some(Message::PreviousRow.into()),
-            Some(Input::Down) => Some(Message::NextRow.into()),
+            Some(Input::Up) => Some(Message::ScrollUp.into()),
+            Some(Input::Down) => Some(Message::ScrollDown.into()),
+            Some(Input::Home) => Some(Message::ScrollToFirst.into()),
+            Some(Input::End) => Some(Message::ScrollToLast.into()),
+            Some(Input::PageUp) => Some(Message::PageUp.into()),
+            Some(Input::PageDown) => Some(Message::PageDown.into()),
             Some(Input::Section(section @ 1..=5)) => Some(Message::SelectSection(section).into()),
             Some(Input::PreviousTab) => Some(Message::PreviousTab.into()),
             Some(Input::NextTab) => Some(Message::NextTab.into()),
@@ -696,8 +836,12 @@ impl Screen for HttpClientScreen {
         };
 
         match message {
-            Message::PreviousRow => self.previous_row(),
-            Message::NextRow => self.next_row(),
+            Message::ScrollUp => self.scroll_up(),
+            Message::ScrollDown => self.scroll_down(),
+            Message::ScrollToFirst => self.scroll_to_first(),
+            Message::ScrollToLast => self.scroll_to_last(),
+            Message::PageUp => self.page_up(),
+            Message::PageDown => self.page_down(),
             Message::SelectSection(section) => self.select_section(section),
             Message::PreviousTab => self.select_previous_tab(),
             Message::NextTab => self.select_next_tab(),
