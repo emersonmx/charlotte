@@ -41,7 +41,7 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("<y>", "Copy Selected Value"),
     ("<tab>/<]>", "Next Tab"),
     ("<s-tab>/<[>", "Previous Tab"),
-    ("<?>/<f1>", "Help"),
+    ("<?>", "Help"),
     ("<q>", "Quit"),
 ];
 
