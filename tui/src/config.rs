@@ -13,22 +13,26 @@ pub struct Config {
     #[allow(unused)]
     pub config_dir: PathBuf,
     pub certs_dir: PathBuf,
+    pub logs_dir: PathBuf,
 }
 
 impl Config {
     const DEFAULT_DIR_ENV: &str = "CHARLENE_CONFIG_DIR";
     const DEFAULT_DIR: &str = ".config/charlene";
     const CERTS_DIR: &str = "certs";
+    const LOGS_DIR: &str = "logs";
 
     pub fn new(server_host: String, server_port: u16) -> Result<Self, Error> {
         let config_dir = Self::default_directory()?;
         let certs_dir = config_dir.join(Self::CERTS_DIR);
+        let logs_dir = config_dir.join(Self::LOGS_DIR);
 
         Ok(Self {
             server_host,
             server_port,
             config_dir,
             certs_dir,
+            logs_dir,
         })
     }
 

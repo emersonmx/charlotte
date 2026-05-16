@@ -18,6 +18,7 @@ arboard = { version = "3.6", features = [
 ], default-features = false }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-appender.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

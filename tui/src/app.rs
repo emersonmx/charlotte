@@ -1,6 +1,7 @@
 use crate::{
     clipboard::{ArboardClipboard, Clipboard},
     config::Config,
+    logger::{error, info},
     modals::{
         ConfirmQuitModal, ConfirmQuitModalMessage, ShortcutsModal, ShortcutsModalMessage,
         WaitingModal,
@@ -138,6 +139,11 @@ impl App {
             let _ = abort_app_tx.send(result);
         });
 
+        info!(
+            "Proxy server is running on {}:{}",
+            self.config.server_host, self.config.server_port
+        );
+
         let mut event_stream = EventStream::new();
         while self.running {
             terminal.draw(|frame: &mut Frame| self.draw(frame))?;
@@ -149,6 +155,7 @@ impl App {
         }
 
         server_handle.await?;
+        info!("Proxy server stopped");
 
         self.exit_error.take().map_or(Ok(()), Err)
     }
@@ -157,21 +164,29 @@ impl App {
         tokio::fs::create_dir_all(&self.config.certs_dir)
             .await
             .map_err(|e| {
-                anyhow::anyhow!(
+                let message = format!(
                     "Failed to create certificates directory '{}': {}",
                     self.config.certs_dir.display(),
                     e
-                )
+                );
+                error!("{message}");
+                anyhow::anyhow!(message)
             })?;
 
         if !self.config.certs_dir.join("ca.crt").exists()
             || !self.config.certs_dir.join("ca.key").exists()
             || !self.config.certs_dir.join("ca.pem").exists()
         {
-            let key_pair = generate_key_pair()
-                .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
-            let cert = generate_certificate(&key_pair)
-                .map_err(|e| anyhow::anyhow!("Failed to generate certificate: {}", e))?;
+            let key_pair = generate_key_pair().map_err(|e| {
+                let message = format!("Failed to generate key pair: {}", e);
+                error!("{message}");
+                anyhow::anyhow!(message)
+            })?;
+            let cert = generate_certificate(&key_pair).map_err(|e| {
+                let message = format!("Failed to generate certificate: {}", e);
+                error!("{message}");
+                anyhow::anyhow!(message)
+            })?;
 
             let certs_path = self.config.certs_dir.clone();
             let mut cert_file_der = tokio::fs::File::create(certs_path.join("ca.crt")).await?;
@@ -187,7 +202,11 @@ impl App {
             &self.config.certs_dir.join("ca.key"),
         )
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to load certificate and key: {}", e))
+        .map_err(|e| {
+            let message = format!("Failed to load certificate and key: {}", e);
+            error!("{message}");
+            anyhow::anyhow!(message)
+        })
     }
 
     fn draw(&mut self, frame: &mut Frame) {
@@ -231,6 +250,12 @@ impl App {
 
     async fn handle_proxy_message(&mut self, message: ProxyMessage) -> Option<Message> {
         match message {
+            ProxyMessage::ClientConnected(addr) => {
+                info!("Client connected: {}", addr);
+            }
+            ProxyMessage::ClientDisconnected(addr) => {
+                info!("Client disconnected: {}", addr);
+            }
             ProxyMessage::RequestSent((id, request)) => {
                 return Some(Message::StoreRequest(Box::new((id, request))));
             }
@@ -238,12 +263,13 @@ impl App {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
             ProxyMessage::ErrorOccurred((request_id, error)) => {
-                let _text = if let Some(request_id) = request_id {
-                    format!("Error occurred for request {}: {:#?}", request_id, error)
+                let text = if let Some(request_id) = request_id {
+                    format!("Error occurred for request {}: {:?}", request_id, error)
                 } else {
-                    format!("Error occurred: {:#?}", error)
+                    format!("Error occurred: {:?}", error)
                 };
-                // TODO: Log error
+                error!("{text}");
+
                 return None;
             }
             _ => {}
@@ -258,11 +284,15 @@ impl App {
     ) -> Option<Message> {
         match result {
             Ok(Err(error)) => {
-                self.exit_error = Some(anyhow::anyhow!(error.to_string()));
+                let message = error.to_string();
+                error!("{message}");
+                self.exit_error = Some(anyhow::anyhow!(message));
                 return Some(Message::Quit);
             }
             Err(_) => {
-                self.exit_error = Some(anyhow::anyhow!("Server was aborted unexpectedly"));
+                let message = "Server was aborted unexpectedly";
+                error!("{message}");
+                self.exit_error = Some(anyhow::anyhow!(message));
                 return Some(Message::Quit);
             }
             _ => {}
@@ -310,7 +340,14 @@ impl App {
 
         let request_entry = match self.request_store.lock() {
             Ok(store) => store.values().nth(selected)?.clone(),
-            Err(_) => return Some(Message::Quit),
+            Err(e) => {
+                let message = format!(
+                    "Failed to access request store for showing HTTP client screen with selected request index {}: {}",
+                    selected, e
+                );
+                error!("{message}");
+                return Some(Message::Quit);
+            }
         };
 
         let screen = self.make_http_client_screen(request_entry);
@@ -333,7 +370,14 @@ impl App {
 
                 Some(Message::RequestEntryUpdated(request_entry.into()))
             }
-            Err(_) => Some(Message::Quit),
+            Err(e) => {
+                let message = format!(
+                    "Failed to access request store for storing request {}: {}",
+                    request_id, e
+                );
+                error!("{message}");
+                Some(Message::Quit)
+            }
         }
     }
 
@@ -351,7 +395,14 @@ impl App {
                 }
                 None
             }
-            Err(_) => Some(Message::Quit),
+            Err(e) => {
+                let message = format!(
+                    "Failed to access request store for storing response for request {}: {}",
+                    request_id, e
+                );
+                error!("{message}");
+                Some(Message::Quit)
+            }
         }
     }
 
@@ -364,8 +415,8 @@ impl App {
         match self.clipboard.set_text(content) {
             Ok(_) => None,
             Err(e) => {
-                let _error_message = format!("Failed to copy to clipboard: {}", e);
-                // TODO: Log error
+                let error_message = format!("Failed to copy to clipboard: {}", e);
+                error!("{error_message}");
                 None
             }
         }
