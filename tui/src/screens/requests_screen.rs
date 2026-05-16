@@ -20,6 +20,10 @@ use ratatui::{
 pub enum Message {
     SelectPreviousRow,
     SelectNextRow,
+    SelectFirstRow,
+    SelectLastRow,
+    PageUp,
+    PageDown,
     UpdateTableState,
 }
 
@@ -167,6 +171,18 @@ impl RequestsScreenState {
         self.table_scroll_state.next();
         self.selected_request_entry = self.table_state.selected();
     }
+
+    fn select_first_request_entry(&mut self) {
+        self.table_state.select_first();
+        self.table_scroll_state.first();
+        self.selected_request_entry = self.table_state.selected();
+    }
+
+    fn select_last_request_entry(&mut self) {
+        self.table_state.select_last();
+        self.table_scroll_state.last();
+        self.selected_request_entry = self.table_state.selected();
+    }
 }
 
 pub struct RequestsScreen {
@@ -184,6 +200,8 @@ impl RequestsScreen {
 }
 
 impl RequestsScreen {
+    const PAGE_SCROLL_STEP: usize = 20;
+
     fn request_entry_updated(&mut self, request_entry: Box<RequestEntry>) -> Option<AppMessage> {
         self.state
             .update_table_column_widths(request_entry.as_ref());
@@ -199,6 +217,38 @@ impl RequestsScreen {
 
     fn select_next_row(&mut self) -> Option<AppMessage> {
         self.state.select_next_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
+    }
+
+    fn select_first_row(&mut self) -> Option<AppMessage> {
+        self.state.select_first_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
+    }
+
+    fn select_last_row(&mut self) -> Option<AppMessage> {
+        self.state.select_last_request_entry();
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
+    }
+
+    fn page_up(&mut self) -> Option<AppMessage> {
+        for _ in 0..Self::PAGE_SCROLL_STEP {
+            self.state.select_previous_request_entry();
+        }
+        Some(AppMessage::StoreRequestsScreenState(
+            self.state.clone().into(),
+        ))
+    }
+
+    fn page_down(&mut self) -> Option<AppMessage> {
+        for _ in 0..Self::PAGE_SCROLL_STEP {
+            self.state.select_next_request_entry();
+        }
         Some(AppMessage::StoreRequestsScreenState(
             self.state.clone().into(),
         ))
@@ -283,6 +333,10 @@ impl Screen for RequestsScreen {
         match map_event_to_input(&event) {
             Some(Input::Up) => Some(Message::SelectPreviousRow.into()),
             Some(Input::Down) => Some(Message::SelectNextRow.into()),
+            Some(Input::Home) => Some(Message::SelectFirstRow.into()),
+            Some(Input::End) => Some(Message::SelectLastRow.into()),
+            Some(Input::PageUp) => Some(Message::PageUp.into()),
+            Some(Input::PageDown) => Some(Message::PageDown.into()),
             Some(Input::Accept) => Some(AppMessage::ShowHttpClientScreen),
             Some(Input::Help) => Some(AppMessage::ShowShortcutsModal),
             Some(Input::Quit) => Some(AppMessage::ShowConfirmQuitModal),
@@ -302,6 +356,10 @@ impl Screen for RequestsScreen {
         match message {
             Message::SelectPreviousRow => self.select_previous_row(),
             Message::SelectNextRow => self.select_next_row(),
+            Message::SelectFirstRow => self.select_first_row(),
+            Message::SelectLastRow => self.select_last_row(),
+            Message::PageUp => self.page_up(),
+            Message::PageDown => self.page_down(),
             Message::UpdateTableState => self.update_table_state(),
         }
     }
