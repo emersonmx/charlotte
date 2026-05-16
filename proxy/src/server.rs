@@ -337,6 +337,14 @@ impl Server {
                     source: e.into(),
                 })?;
 
+        self.message_channel
+            .send(Message::ClientConnected(client_addr))
+            .await
+            .map_err(|e| Error::Channel {
+                message: Message::ClientConnected(client_addr).into(),
+                source: e.into(),
+            })?;
+
         let handler = {
             let self_clone = self.clone();
             move |req| {
