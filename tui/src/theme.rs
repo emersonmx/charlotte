@@ -14,22 +14,22 @@ pub mod styles {
     }
 
     pub fn highlight() -> Style {
-        Style::default().fg(DARK_GREEN).bg(LIGHT_GREEN)
+        self::reset().fg(DARK_GREEN).bg(LIGHT_GREEN)
     }
 
     pub fn highlight_fg() -> Style {
-        Style::default().fg(LIGHT_GREEN)
+        self::reset().fg(LIGHT_GREEN)
     }
 
     pub fn info() -> Style {
-        Style::default().fg(INFO_COLOR)
+        self::reset().fg(INFO_COLOR)
     }
 
     pub fn warning() -> Style {
-        Style::default().fg(WARNING_COLOR)
+        self::reset().fg(WARNING_COLOR)
     }
 
     pub fn error() -> Style {
-        Style::default().fg(ERROR_COLOR)
+        self::reset().fg(ERROR_COLOR)
     }
 }

@@ -12,13 +12,26 @@ pub enum Input {
     End,
     Section(usize),
     Accept,
+    Confirm,
     Back,
+    Cancel,
     Copy,
     PreviousTab,
     NextTab,
     Help,
     Quit,
     UnmappedKey,
+}
+
+pub fn map_event_to_yesno(event: &Event) -> Option<Input> {
+    match event {
+        Event::Key(KeyEvent { code, .. }) => match code {
+            KeyCode::Char('y') => Some(Input::Confirm),
+            KeyCode::Char('n') => Some(Input::Cancel),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 pub fn map_event_to_input(event: &Event) -> Option<Input> {
@@ -104,5 +117,23 @@ mod tests {
             Some(Input::UnmappedKey)
         );
         assert_eq!(map_event_to_input(&non_key_event), None);
+    }
+
+    #[rstest]
+    fn test_map_event_to_yesno() {
+        let yes_event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        let no_event = Event::Key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        let other_event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        let non_key_event = Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        });
+
+        assert_eq!(map_event_to_yesno(&yes_event), Some(Input::Confirm));
+        assert_eq!(map_event_to_yesno(&no_event), Some(Input::Cancel));
+        assert_eq!(map_event_to_yesno(&other_event), None);
+        assert_eq!(map_event_to_yesno(&non_key_event), None);
     }
 }

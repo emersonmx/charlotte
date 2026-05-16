@@ -139,7 +139,7 @@ impl Screen for ErrorModal {
             Some(Input::Down) => Some(Message::ScrollDown.into()),
             Some(Input::Left) => Some(Message::ScrollLeft.into()),
             Some(Input::Right) => Some(Message::ScrollRight.into()),
-            Some(Input::Quit) => Some(AppMessage::Quit),
+            Some(Input::Quit) => Some(AppMessage::ShowConfirmQuitModal),
             Some(_) => Some(AppMessage::CloseModal),
             _ => None,
         }
@@ -302,7 +302,10 @@ mod tests {
             modal.handle_event(right_event),
             Some(Message::ScrollRight.into())
         );
-        assert_eq!(modal.handle_event(quit_event), Some(AppMessage::Quit));
+        assert_eq!(
+            modal.handle_event(quit_event),
+            Some(AppMessage::ShowConfirmQuitModal)
+        );
         assert_eq!(
             modal.handle_event(unmapped_key_event),
             Some(AppMessage::CloseModal)

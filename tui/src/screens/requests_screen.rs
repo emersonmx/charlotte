@@ -285,7 +285,7 @@ impl Screen for RequestsScreen {
             Some(Input::Down) => Some(Message::SelectNextRow.into()),
             Some(Input::Accept) => Some(AppMessage::ShowHttpClientScreen),
             Some(Input::Help) => Some(AppMessage::ShowShortcutsModal),
-            Some(Input::Quit) => Some(AppMessage::Quit),
+            Some(Input::Quit) => Some(AppMessage::ShowConfirmQuitModal),
             _ => None,
         }
     }
