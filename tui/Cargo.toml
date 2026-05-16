@@ -16,7 +16,8 @@ tokio.workspace = true
 arboard = { version = "3.6", features = [
     "wayland-data-control",
 ], default-features = false }
-chrono = "0.4"
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

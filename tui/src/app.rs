@@ -2,8 +2,8 @@ use crate::{
     clipboard::{ArboardClipboard, Clipboard},
     config::Config,
     modals::{
-        ConfirmQuitModal, ConfirmQuitModalMessage, ErrorModal, ErrorModalMessage, ShortcutsModal,
-        ShortcutsModalMessage, WaitingModal,
+        ConfirmQuitModal, ConfirmQuitModalMessage, ShortcutsModal, ShortcutsModalMessage,
+        WaitingModal,
     },
     screens::{
         HttpClientScreen, HttpClientScreenMessage, RequestsScreen, RequestsScreenMessage,
@@ -41,11 +41,9 @@ pub enum Message {
     CopyToClipboard(String),
     Quit,
     // Modal-specific
-    ShowErrorModal(String),
     ShowShortcutsModal,
     ShowConfirmQuitModal,
     CloseModal,
-    ErrorModal(ErrorModalMessage),
     ShortcutsModal(ShortcutsModalMessage),
     ConfirmQuitModal(ConfirmQuitModalMessage),
     // Screen-specific
@@ -240,12 +238,13 @@ impl App {
                 return Some(Message::StoreResponse(Box::new((id, response))));
             }
             ProxyMessage::ErrorOccurred((request_id, error)) => {
-                let text = if let Some(request_id) = request_id {
+                let _text = if let Some(request_id) = request_id {
                     format!("Error occurred for request {}: {:#?}", request_id, error)
                 } else {
                     format!("Error occurred: {:#?}", error)
                 };
-                return Some(Message::ShowErrorModal(text));
+                // TODO: Log error
+                return None;
             }
             _ => {}
         }
@@ -283,7 +282,6 @@ impl App {
             }
             Message::CopyToClipboard(content) => self.copy_to_clipboard(content),
             Message::Quit => self.quit(),
-            Message::ShowErrorModal(content) => self.show_error_modal(content),
             Message::ShowShortcutsModal => self.show_shortcuts_modal(),
             Message::ShowConfirmQuitModal => self.show_confirm_quit_modal(),
             Message::CloseModal => self.close_modal(),
@@ -365,21 +363,17 @@ impl App {
     fn copy_to_clipboard(&mut self, content: String) -> Option<Message> {
         match self.clipboard.set_text(content) {
             Ok(_) => None,
-            Err(e) => Some(Message::ShowErrorModal(format!(
-                "Failed to copy to clipboard: {}",
-                e
-            ))),
+            Err(e) => {
+                let _error_message = format!("Failed to copy to clipboard: {}", e);
+                // TODO: Log error
+                None
+            }
         }
     }
 
     fn quit(&mut self) -> Option<Message> {
         self.running = false;
         self.abort_server_tx.take().map(|tx| tx.send(()));
-        None
-    }
-
-    fn show_error_modal(&mut self, content: String) -> Option<Message> {
-        self.modal = Some(Box::new(ErrorModal::new(&content)));
         None
     }
 
@@ -485,20 +479,6 @@ mod tests {
     #[case(
         ProxyMessage::ResponseReceived((RequestId::new(1), Response::default())),
         Some(Message::StoreResponse((RequestId::new(1), Response::default()).into()))
-    )]
-    #[case(
-        ProxyMessage::ErrorOccurred((
-            None,
-            ServerError::AcceptConnection("TEST ERROR".to_string().into()).into()
-        )),
-        Some(Message::ShowErrorModal("Error occurred: AcceptConnection(\n    \"TEST ERROR\",\n)".to_string()))
-    )]
-    #[case(
-        ProxyMessage::ErrorOccurred((
-            Some(RequestId::new(1)),
-            ServerError::AcceptConnection("TEST ERROR".to_string().into()).into()
-        )),
-        Some(Message::ShowErrorModal("Error occurred for request 1: AcceptConnection(\n    \"TEST ERROR\",\n)".to_string()))
     )]
     async fn proxy_message_to_app_message(
         #[case] proxy_message: ProxyMessage,
@@ -621,21 +601,6 @@ mod tests {
         assert_eq!(message, None);
         assert!(!app.running);
         assert!(app.exit_error.is_none());
-    }
-
-    #[rstest]
-    fn show_error_modal_message(mut terminal: Terminal<TestBackend>, mut app: App) {
-        let content = "Test error message".to_string();
-        let message = Message::ShowErrorModal(content.clone());
-
-        let result_message = app.update(message);
-
-        assert_eq!(result_message, None);
-        assert!(app.modal.is_some());
-
-        let modal = app.modal.as_mut().unwrap();
-        terminal.draw(|frame| modal.draw(frame)).unwrap();
-        assert_snapshot!(terminal.backend());
     }
 
     #[rstest]
