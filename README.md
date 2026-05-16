@@ -72,6 +72,33 @@ To avoid HTTPS security warnings in browsers or clients, you need to add the
 - The TUI displays incoming HTTP requests and their responses.
 - Use arrow keys or `j`/`k` to navigate.
 - Press `q` to quit.
+  **Now, a confirmation modal will appear:**
+  _"Are you sure you want to quit? (y/n)"_
+  Press `y` to confirm or `n` to cancel.
+
+### Keyboard Shortcuts
+
+| Key                | Action                                 |
+|--------------------|----------------------------------------|
+| Up / k             | Move Up                                |
+| Down / j           | Move Down                              |
+| Left / h           | Move Left                              |
+| Right / l          | Move Right                             |
+| Enter              | Select/Confirm                         |
+| q                  | Show quit confirmation modal           |
+| y                  | Confirm quit (when modal is open)      |
+| n                  | Cancel quit (when modal is open)       |
+| esc/backspace      | Back/Close modal                       |
+| tab / ]            | Next Tab                               |
+| s-tab / [          | Previous Tab                           |
+| ? / F1             | Show shortcuts help                    |
+
+### Example: Quitting the App
+
+1. Press `q`
+2. A modal appears:
+   _Are you sure you want to quit? (y/n)_
+3. Press `y` to quit, or `n` to return to the app.
 
 ## Development
 
