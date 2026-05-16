@@ -23,22 +23,18 @@ or analyze HTTP(S) requests and responses between clients and servers.
 
 ### Installation
 
-Clone the repository:
+Install Charlene directly with Cargo (no need to clone the repository):
+
+```sh
+cargo install --locked --git https://github.com/emersonmx/charlene
+```
+
+For development (optional), clone the repository and set up tools:
 
 ```sh
 git clone https://github.com/emersonmx/charlene.git
 cd charlene
-```
-
-Install development tools and hooks:
-
-```sh
 just setup
-```
-
-Build the project:
-
-```sh
 just build
 ```
 
@@ -106,6 +102,39 @@ To avoid HTTPS security warnings in browsers or clients, you need to add the
 - Lint code: `just lint`
 - Run tests: `just test`
 - Run with live reload: `just watch`
+
+## Architecture & Main Components
+
+Charlene is organized into modular components, each with clear responsibilities,
+to provide HTTP/HTTPS proxy functionality with a TUI. The main modules are:
+
+- **proxy/**: Handles the proxy server, certificate management, and HTTP layer
+  (in `proxy/src/`).
+  - `server.rs`: Accepts TCP connections, manages the request/response
+    lifecycle, and sends events to the TUI.
+  - `certs.rs`: Generates and manages CA and per-domain certificates for HTTPS
+    interception.
+  - `http.rs`: Defines types and utilities for requests, responses, and header
+    manipulation.
+
+- **tui/**: Implements the terminal user interface, divided into screens,
+  modals, widgets, and configuration.
+  - `tui/src/app.rs`: Manages the application lifecycle, message routing, and
+    screen transitions.
+  - `tui/src/screens/`: Main screens (requests, HTTP client, error log, etc).
+  - `tui/src/modals/`: Transient modals (error, confirmation, shortcuts, etc).
+  - `tui/src/widgets.rs`: Custom widgets for the TUI.
+  - `tui/src/clipboard.rs`: Clipboard abstraction.
+  - `tui/src/config.rs`: Loads and validates configuration.
+
+- **formatter/**: Utilities for formatting JSON and text for display in the TUI.
+
+Communication between the proxy and the TUI uses asynchronous channels
+(`tokio::mpsc`), so proxy events (requests, responses, errors) are reflected in
+real time in the interface.
+
+Each component is responsible for a well-defined part of the application flow,
+making maintenance, testing, and extensibility easier.
 
 ## Contributing
 
