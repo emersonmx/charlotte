@@ -400,189 +400,70 @@ impl HttpClientScreen {
     }
 
     fn scroll_up(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_previous();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_previous();
-                }
-                Section::Body => {
-                    self.request_body_state.prev();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_previous();
-                }
-                Section::Body => {
-                    self.response_body_state.prev();
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            table.select_previous();
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            text_area.prev();
         }
 
         None
     }
 
     fn scroll_down(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_next();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_next();
-                }
-                Section::Body => {
-                    self.request_body_state.next();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_next();
-                }
-                Section::Body => {
-                    self.response_body_state.next();
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            table.select_next();
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            text_area.next();
         }
 
         None
     }
 
     fn scroll_to_first(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_first();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_first();
-                }
-                Section::Body => {
-                    self.request_body_state.first();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_first();
-                }
-                Section::Body => {
-                    self.response_body_state.first();
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            table.select_first();
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            text_area.first();
         }
 
         None
     }
 
     fn scroll_to_last(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    self.query_params_table_state.select_last();
-                }
-                Section::Headers => {
-                    self.request_headers_table_state.select_last();
-                }
-                Section::Body => {
-                    self.request_body_state.last();
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    self.response_headers_table_state.select_last();
-                }
-                Section::Body => {
-                    self.response_body_state.last();
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            table.select_last();
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            text_area.last();
         }
 
         None
     }
 
     fn page_up(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.query_params_table_state.select_previous();
-                    }
-                }
-                Section::Headers => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.request_headers_table_state.select_previous();
-                    }
-                }
-                Section::Body => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.request_body_state.prev();
-                    }
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.response_headers_table_state.select_previous();
-                    }
-                }
-                Section::Body => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.response_body_state.prev();
-                    }
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            for _ in 0..Self::PAGE_SCROLL_STEP {
+                table.select_previous();
+            }
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            for _ in 0..Self::PAGE_SCROLL_STEP {
+                text_area.prev();
+            }
         }
 
         None
     }
 
     fn page_down(&mut self) -> Option<AppMessage> {
-        match self.tab_selected {
-            Tab::Request => match self.section_selected {
-                Section::QueryParams => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.query_params_table_state.select_next();
-                    }
-                }
-                Section::Headers => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.request_headers_table_state.select_next();
-                    }
-                }
-                Section::Body => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.request_body_state.next();
-                    }
-                }
-                _ => {}
-            },
-            Tab::Response => match self.section_selected {
-                Section::Headers => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.response_headers_table_state.select_next();
-                    }
-                }
-                Section::Body => {
-                    for _ in 0..Self::PAGE_SCROLL_STEP {
-                        self.response_body_state.next();
-                    }
-                }
-                _ => {}
-            },
+        if let Some(table) = self.selected_table_state() {
+            for _ in 0..Self::PAGE_SCROLL_STEP {
+                table.select_next();
+            }
+        } else if let Some(text_area) = self.selected_text_area_state() {
+            for _ in 0..Self::PAGE_SCROLL_STEP {
+                text_area.next();
+            }
         }
+
         None
     }
 
@@ -658,6 +539,23 @@ impl HttpClientScreen {
         };
         self.highlight_selected();
         None
+    }
+
+    fn selected_table_state(&mut self) -> Option<&mut KeyValueTableState> {
+        match (&self.tab_selected, &self.section_selected) {
+            (Tab::Request, Section::QueryParams) => Some(&mut self.query_params_table_state),
+            (Tab::Request, Section::Headers) => Some(&mut self.request_headers_table_state),
+            (Tab::Response, Section::Headers) => Some(&mut self.response_headers_table_state),
+            _ => None,
+        }
+    }
+
+    fn selected_text_area_state(&mut self) -> Option<&mut TextAreaState> {
+        match (&self.tab_selected, &self.section_selected) {
+            (Tab::Request, Section::Body) => Some(&mut self.request_body_state),
+            (Tab::Response, Section::Body) => Some(&mut self.response_body_state),
+            _ => None,
+        }
     }
 
     fn copy_selected_to_clipboard(&mut self) -> Option<AppMessage> {
