@@ -68,8 +68,13 @@ impl Widget for BorderedText {
             block = block.style(self.focus_style);
         }
 
+        let inner = block.inner(area);
+        let text_lines = self.text.lines().count() as u16;
+        let max_scroll_y = text_lines.saturating_sub(inner.height);
+        let scroll_y = self.scroll.0.min(max_scroll_y);
+
         let paragraph = Paragraph::new(self.text)
-            .scroll(self.scroll)
+            .scroll((scroll_y, self.scroll.1))
             .block(block)
             .alignment(self.alignment);
         paragraph.render(area, buf);
