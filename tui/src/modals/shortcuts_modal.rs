@@ -160,8 +160,7 @@ impl Screen for ShortcutsModal {
             Some(Input::End) => Some(Message::End.into()),
             Some(Input::PageUp) => Some(Message::PageUp.into()),
             Some(Input::PageDown) => Some(Message::PageDown.into()),
-            Some(Input::Back) => Some(AppMessage::CloseModal),
-            Some(Input::Quit) => Some(AppMessage::ShowConfirmQuitModal),
+            Some(Input::Back | Input::Quit) => Some(AppMessage::CloseModal),
             _ => None,
         }
     }
