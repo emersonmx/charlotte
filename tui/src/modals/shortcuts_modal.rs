@@ -53,6 +53,8 @@ pub struct ShortcutsModal {
 }
 
 impl ShortcutsModal {
+    const PAGE_SCROLL_STEP: usize = 10;
+
     pub fn new() -> Self {
         let content_length = SHORTCUTS.len();
         Self {
@@ -92,9 +94,8 @@ impl ShortcutsModal {
     }
 
     fn page_up(&mut self) -> Option<AppMessage> {
-        let step = 5;
-        if self.scroll >= step {
-            self.scroll -= step;
+        if self.scroll >= Self::PAGE_SCROLL_STEP {
+            self.scroll -= Self::PAGE_SCROLL_STEP;
         } else {
             self.scroll = 0;
         }
@@ -103,9 +104,8 @@ impl ShortcutsModal {
     }
 
     fn page_down(&mut self) -> Option<AppMessage> {
-        let step = 5;
         let max = SHORTCUTS.len().saturating_sub(1);
-        self.scroll = (self.scroll + step).min(max);
+        self.scroll = (self.scroll + Self::PAGE_SCROLL_STEP).min(max);
         self.scrollbar_state = self.scrollbar_state.position(self.scroll);
         None
     }
