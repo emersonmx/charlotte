@@ -1,13 +1,13 @@
 use crate::{
     app::{Message as AppMessage, Screen},
     inputmap::{Input, map_event_to_input},
-    theme,
+    widgets::BorderedText,
 };
 use crossterm::event::Event;
 use ratatui::{
     Frame,
     layout::Constraint,
-    widgets::{Block, Borders},
+    widgets::{Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,8 +44,6 @@ const SHORTCUTS: &[(&str, &str)] = &[
     ("<?>/<f1>", "Help"),
     ("<q>", "Quit"),
 ];
-
-use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
 pub struct ShortcutsModal {
     scroll: usize,
@@ -133,13 +131,10 @@ impl Screen for ShortcutsModal {
         let visible_lines = centered_area.height.saturating_sub(2) as usize;
         let max_scroll = lines.len().saturating_sub(visible_lines);
         let scroll = self.scroll.min(max_scroll);
-        let paragraph = Paragraph::new(text).scroll((scroll as u16, 0)).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title("Shortcuts")
-                .style(theme::styles::reset()),
-        );
-        frame.render_widget(paragraph, centered_area);
+        let bordered_text = BorderedText::new(text)
+            .title(Some("Shortcuts".to_string()))
+            .scroll((scroll as u16, 0));
+        frame.render_widget(bordered_text, centered_area);
 
         self.scrollbar_state = self
             .scrollbar_state
